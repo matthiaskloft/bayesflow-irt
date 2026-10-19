@@ -106,6 +106,28 @@ def _edit_spec(card_dir, tmp_path, fn):
     return out
 
 
+@pytest.mark.parametrize("kind", ["traversal", "absolute", "drive", ".."])
+def test_sidecar_name_must_be_a_bare_file_name(card_dir, tmp_path, kind):
+    """metadata.filename comes from the record, so it cannot select a file
+    outside the card directory and its parent."""
+    outside = tmp_path / "private" / "sidecar.json"
+    outside.parent.mkdir()
+    outside.write_bytes((card_dir.parent / "m_metadata.json").read_bytes())
+    name = {
+        "traversal": "../private/sidecar.json",
+        "absolute": str(outside),
+        "drive": "C:sidecar.json",
+        "..": "..",
+    }[kind]
+    work = tmp_path / "w"
+    work.mkdir()
+    out = _copy(card_dir, work, lambda r: r["metadata"].update(filename=name))
+    with pytest.raises(FileNotFoundError, match="not a bare file name"):
+        cr.load_card_inputs(out)
+    # An explicit sidecar stays possible.
+    assert cr.load_card_inputs(out, metadata=outside) is not None
+
+
 def test_sidecar_of_another_model_is_rejected(card_dir, tmp_path):
     out = _copy(card_dir, tmp_path)
     side = tmp_path / "m_metadata.json"

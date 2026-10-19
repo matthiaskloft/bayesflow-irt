@@ -115,6 +115,39 @@ def _rename_component(component: str, mapping: dict[str, str]) -> str:
     return mapping[base] + (match.group("suffix") or "")
 
 
+def _reject_unsafe_storage(file: Any) -> None:
+    """Raise ``ValueError`` if ``file`` points outside itself for data.
+
+    Keras refuses HDF5 datasets with external storage
+    (``keras.src.saving.saving_lib.H5Entry._verify_dataset``, the 3.12.1
+    loading safeguard). :func:`_rewrite` reads every dataset into memory, so
+    without the same check a crafted checkpoint could copy the bytes of an
+    arbitrary local file into the rewritten weights. External links and
+    virtual datasets are rejected for the same reason. Nothing is read.
+    """
+    import h5py
+
+    # Collected and raised afterwards: an exception inside an h5py visitor
+    # callback surfaces as a SystemError from the C layer.
+    problems: list[str] = []
+
+    def check_link(name: str, link: Any) -> None:
+        if isinstance(link, h5py.ExternalLink):
+            problems.append(f"Not allowed: H5 external link at {name!r}")
+
+    def check_dataset(name: str, obj: Any) -> None:
+        if isinstance(obj, h5py.Dataset) and (obj.external or obj.is_virtual):
+            problems.append(
+                f"Not allowed: H5 dataset {name!r} with external or virtual "
+                "storage"
+            )
+
+    file.visititems_links(check_link)
+    file.visititems(check_dataset)
+    if problems:
+        raise ValueError("; ".join(problems))
+
+
 def _rewrite(source: Path, destination: Path, mapping: dict[str, str]) -> bool:
     """Copy ``source`` to ``destination`` with layer paths renamed.
 
@@ -124,6 +157,8 @@ def _rewrite(source: Path, destination: Path, mapping: dict[str, str]) -> bool:
     import h5py
 
     changed = False
+    with h5py.File(source, "r") as src:
+        _reject_unsafe_storage(src)
     with h5py.File(source, "r") as src, h5py.File(destination, "w") as dst:
         dst.attrs.update(src.attrs)
 
@@ -171,6 +206,10 @@ def load_weights_compat(model: Any, filepath: str | Path) -> str:
 
     Raises
     ------
+    ValueError
+        If the file has datasets with external or virtual storage, or
+        external links, which Keras itself refuses to load. The model is
+        rolled back first, and the rename fallback never reads such a file.
     RuntimeError
         If no spelling restores the weights. ``model`` is rolled back to the
         values it held on entry first, and the message carries the original
@@ -208,7 +247,12 @@ def load_weights_compat(model: Any, filepath: str | Path) -> str:
             # Numbered rather than named after the label: `>` is not a legal
             # filename character on Windows.
             candidate = Path(tmp) / f"attempt{index}.weights.h5"
-            if not _rewrite(path, candidate, mapping):
+            try:
+                renamed = _rewrite(path, candidate, mapping)
+            except ValueError:
+                _restore(model, snapshot)
+                raise
+            if not renamed:
                 continue
             _restore(model, snapshot)
             try:

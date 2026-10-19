@@ -184,6 +184,54 @@ class TestLoadWeightsCompat:
         assert weights_digest(target) == before
 
 
+class TestExternalStorageRejected:
+    SENTINEL = np.array([1234.5, -6789.25, 42.0, 7.0], dtype="<f4")
+
+    def _hostile(self, tmp_path):
+        outside = tmp_path / "private.bin"
+        outside.write_bytes(self.SENTINEL.tobytes())
+        path = tmp_path / "hostile.weights.h5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset(
+                "layers/set_attention_block/vars/0",
+                shape=(4,),
+                dtype="<f4",
+                external=[(str(outside), 0, self.SENTINEL.nbytes)],
+            )
+        return path
+
+    def test_rewrite_refuses_before_reading(self, tmp_path):
+        path = self._hostile(tmp_path)
+        destination = tmp_path / "out.weights.h5"
+        with pytest.raises(ValueError, match="external"):
+            _rewrite(path, destination, _OLD_TO_NEW)
+        assert not destination.exists()
+
+    def test_load_weights_compat_does_not_materialize_external_bytes(
+        self, tmp_path
+    ):
+        path = self._hostile(tmp_path)
+        target = _model()
+        before = weights_digest(target)
+        with pytest.raises(ValueError, match="external"):
+            load_weights_compat(target, path)
+        assert weights_digest(target) == before
+        assert not any(
+            np.array_equal(keras.ops.convert_to_numpy(w).ravel()[:4], self.SENTINEL)
+            for w in target.weights
+        )
+
+    def test_external_links_are_refused(self, tmp_path):
+        other = tmp_path / "other.h5"
+        with h5py.File(other, "w") as f:
+            f.create_dataset("x", data=self.SENTINEL)
+        path = tmp_path / "linked.weights.h5"
+        with h5py.File(path, "w") as f:
+            f["layers/set_attention_block"] = h5py.ExternalLink(str(other), "/")
+        with pytest.raises(ValueError, match="external link"):
+            _rewrite(path, tmp_path / "out.weights.h5", _OLD_TO_NEW)
+
+
 class TestRewrite:
     def test_reports_when_nothing_changed(self, tmp_path):
         """A copy that renamed nothing is not worth retrying with."""

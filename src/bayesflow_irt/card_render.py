@@ -22,7 +22,7 @@ import math
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import numpy as np
@@ -378,6 +378,20 @@ def load_card_inputs(
         )
     if metadata is None:
         name = (record.get("metadata") or {}).get("filename")
+        # The name comes from the record, so only a bare file name is looked
+        # up; any other location must be passed explicitly.
+        bare = (
+            isinstance(name, str)
+            and name not in (".", "..")
+            and PureWindowsPath(name).name == name
+            and PurePosixPath(name).name == name
+        )
+        if name and not bare:
+            raise FileNotFoundError(
+                f"The record's metadata.filename {name!r} is not a bare file "
+                "name, so it is not looked up automatically; pass the sidecar "
+                "explicitly (metadata=..., or --metadata)."
+            )
         candidates = [card_dir / name, card_dir.parent / name] if name else []
         found = next((c for c in candidates if c.is_file()), None)
         if found is None:

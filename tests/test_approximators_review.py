@@ -54,10 +54,15 @@ def _run(net, mode, seeds, weights=None):
     _set_seed_states(net, seeds)
     torch.manual_seed(123)
     rng = np.random.default_rng(1)
-    params = torch.tensor(rng.normal(size=(8, 2)), dtype=torch.float32)
-    cond = torch.tensor(rng.normal(size=(8, 3)), dtype=torch.float32)
+    # Keras' default device, so inputs match the flow's own draws on CUDA.
+    params = keras.ops.convert_to_tensor(rng.normal(size=(8, 2)), dtype="float32")
+    cond = keras.ops.convert_to_tensor(rng.normal(size=(8, 3)), dtype="float32")
     cond.requires_grad_()
-    sw = None if weights is None else torch.tensor(weights, dtype=torch.float32)
+    sw = (
+        None
+        if weights is None
+        else keras.ops.convert_to_tensor(weights, dtype="float32")
+    )
     for w in net.trainable_weights:
         w.value.grad = None
     with torch.enable_grad():
@@ -65,7 +70,9 @@ def _run(net, mode, seeds, weights=None):
             params, cond, sample_weight=sw, stage="training"
         )
         loss.backward()
-    grads = [w.value.grad.detach().clone().numpy() for w in net.trainable_weights]
+    grads = [
+        w.value.grad.detach().cpu().clone().numpy() for w in net.trainable_weights
+    ]
     return float(loss), grads, _seed_states(net)
 
 

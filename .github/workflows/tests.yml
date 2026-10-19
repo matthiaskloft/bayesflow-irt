@@ -31,7 +31,7 @@ jobs:
           # pyproject.toml.
           #
           # ONE pip command: bayesflow-hpo pins `keras>=3.9,<3.13` and this
-          # package only asks for `keras>=3.0`, so resolving them together
+          # package asks for `keras>=3.12.1`, so resolving them together
           # turns a genuine conflict into an install error instead of a
           # silently inconsistent env.
           pip install -e ".[dev,torch,hpo]"

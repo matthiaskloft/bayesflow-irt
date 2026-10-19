@@ -386,6 +386,11 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
 
+    # The config's seed also drives weight initialisation and the flow and
+    # dropout draws, not only the simulators.
+    if cfg.get("seed") is not None:
+        keras.utils.set_random_seed(int(cfg["seed"]))
+
     make_simulator, make_adapter, adapter_kwargs = build_simulator_factory(cfg)
     simulator = make_simulator(n_items=n_items, n_persons=n_persons)
     adapter = make_adapter(simulator, **adapter_kwargs)

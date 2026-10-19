@@ -2349,6 +2349,7 @@ def fit_with_oom_retry(
                         if not is_oom_error(exc):
                             raise
                         last_exc = exc
+                        n_this_attempt = 0
 
                         # Count epochs completed during this failed attempt
                         # and accumulate so the next retry starts where this
@@ -2420,10 +2421,13 @@ def fit_with_oom_retry(
                         # epochs_done * num_batches (that assumes
                         # gradient_accumulation_steps == 1 throughout, which
                         # no longer holds once step 3's compensation raises
-                        # it mid-retry). This also covers an OOM before the
-                        # first completed epoch, whose partial steps would
-                        # otherwise stay in the counter.
-                        if num_batches is not None:
+                        # it mid-retry). Only done when this attempt completed
+                        # an epoch: an OOM before the first completed epoch
+                        # keeps the weights and Adam slots of its partial
+                        # updates, so the counter (used for Adam's bias
+                        # correction as well as the schedule) must keep
+                        # them too.
+                        if num_batches is not None and n_this_attempt > 0:
                             target_step = (
                                 baseline_iterations + completed_optimizer_steps
                             )

@@ -2604,9 +2604,10 @@ class TestFitWithOomRetry:
         self, complete_epoch_first
     ):
         """A model entering the retry loop with optimizer.iterations > 0 must
-        be resynced to that baseline plus the completed steps, including when
-        the OOM hits before any epoch completed (partial steps of the failed
-        attempt are then discarded)."""
+        be resynced to that baseline plus the completed steps after an OOM
+        that follows a completed epoch. An OOM before any epoch completed
+        leaves the counter alone, because the weights and optimizer slots
+        keep that attempt's partial updates."""
 
         class _FakeIterations:
             def __init__(self, value):
@@ -2655,8 +2656,55 @@ class TestFitWithOomRetry:
             fit_kwargs=dict(epochs=5, num_batches=4),
         )
 
-        expected = 104 if complete_epoch_first else 100
+        expected = 104 if complete_epoch_first else 103
         assert approx.seen_start == [100, expected]
+
+    def test_oom_before_first_epoch_keeps_adam_step_consistent(self):
+        """With a real Adam, an OOM before any completed epoch must not
+        rewind the step counter that backs the retained moment slots."""
+        import keras
+
+        def make():
+            var = keras.Variable(np.zeros((1,), dtype="float32"))
+            opt = keras.optimizers.Adam(learning_rate=0.001)
+            opt.build([var])
+            return var, opt
+
+        ref_var, ref_opt = make()
+        for _ in range(4):
+            ref_opt.apply([keras.ops.ones((1,))], [ref_var])
+
+        var, opt = make()
+
+        class FakeApprox:
+            def __init__(self):
+                self.optimizer = opt
+                self.history = None
+                self.call_count = 0
+
+            def fit(self, *, batch_size, **kwargs):
+                self.call_count += 1
+                if self.call_count == 1:
+                    for _ in range(3):
+                        opt.apply([keras.ops.ones((1,))], [var])
+                    raise RuntimeError("CUDA out of memory")
+                opt.apply([keras.ops.ones((1,))], [var])
+                return _FakeHistory()
+
+        fit_with_oom_retry(
+            FakeApprox(),
+            None,
+            start_batch_size=32,
+            min_batch_size=8,
+            fit_kwargs=dict(epochs=1, num_batches=4),
+        )
+
+        assert int(opt.iterations) == 4
+        np.testing.assert_allclose(
+            keras.ops.convert_to_numpy(var),
+            keras.ops.convert_to_numpy(ref_var),
+            rtol=1e-6,
+        )
 
     def test_returned_history_covers_all_epochs_across_restarts(self):
         """The returned History must cover every epoch actually trained,
