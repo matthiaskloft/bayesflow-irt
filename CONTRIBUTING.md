@@ -1,5 +1,10 @@
 # Contributing to bayesflow-irt
 
+Pull requests are accepted from collaborators only. If you are not a
+collaborator, please open an [issue](https://github.com/matthiaskloft/bayesflow-irt/issues)
+for bug reports, questions or feature ideas; pull requests from
+non-collaborators will be closed. The rest of this guide is for collaborators.
+
 ## Setup
 
 ```bash
@@ -53,6 +58,14 @@ you touch training-heavy paths.
 2. Keep the diff focused.
 3. Run the relevant tests and lint checks.
 4. Describe behavior changes, migration impact, and any remaining risks.
+
+Merged branches are deleted. Before deleting an abandoned branch, tag its
+last commit as `archive/failed/<name>` so the attempt stays reachable.
+
+## Releases
+
+Releases are semantic version tags (`v0.1.1`, `v0.2.0`), each with an entry
+in `CHANGELOG.md`.
 
 ## Reporting issues
 
