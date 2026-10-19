@@ -176,9 +176,9 @@ class TestTccBiasInTccUnits:
         # The same per-item shift gives the same value for 2 and 20 items.
         metric = hpo.make_tcc_bias_metric(thetas=(0.0,), model="1pl", scale="tcc")
         vals = [
-            metric(
-                self._inputs(np.full((2, 6, n), 0.5), np.zeros((2, n)), ("b",))
-            )["tcc_bias"]
+            metric(self._inputs(np.full((2, 6, n), 0.5), np.zeros((2, n)), ("b",)))[
+                "tcc_bias"
+            ]
             for n in (2, 20)
         ]
         assert vals[0] == pytest.approx(vals[1])
@@ -199,9 +199,9 @@ class TestTccBiasInTccUnits:
         make = TestTccBiasMetric._calibrated
         ok = metric(self._inputs(*make(rng, 600, 20), ("a", "b")))["tcc_bias"]
         assert ok < 0.01
-        biased = metric(
-            self._inputs(*make(rng, 600, 20, shift=-0.1), ("a", "b"))
-        )["tcc_bias"]
+        biased = metric(self._inputs(*make(rng, 600, 20, shift=-0.1), ("a", "b")))[
+            "tcc_bias"
+        ]
         assert biased > 0.01
 
     def test_validation(self):

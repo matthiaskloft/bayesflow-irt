@@ -1326,7 +1326,8 @@ def test_compute_calibration_error_matches_bayesflow_mean():
     posterior = mu[:, None] + 0.8 * rng.normal(size=(400, 150))
     ours = compute_calibration_error(posterior, true_vals, aggregation="mean")
     ref = bf.diagnostics.calibration_error(
-        estimates=posterior[:, :, None], targets=true_vals[:, None],
+        estimates=posterior[:, :, None],
+        targets=true_vals[:, None],
         aggregation=np.mean,
     )
     assert np.isclose(

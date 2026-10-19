@@ -70,9 +70,7 @@ def _run(net, mode, seeds, weights=None):
             params, cond, sample_weight=sw, stage="training"
         )
         loss.backward()
-    grads = [
-        w.value.grad.detach().cpu().clone().numpy() for w in net.trainable_weights
-    ]
+    grads = [w.value.grad.detach().cpu().clone().numpy() for w in net.trainable_weights]
     return float(loss), grads, _seed_states(net)
 
 

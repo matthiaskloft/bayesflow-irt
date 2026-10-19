@@ -67,9 +67,13 @@ class Reference:
     def to_payload(self) -> dict[str, Any]:
         """The dashboard's view: cells keyed ``"<items>x<persons>"``."""
         return {
-            "name": self.name, "estimator": self.estimator, "paired": self.paired,
-            "datasets": self.datasets, "priors_match": self.priors_match,
-            "notes": self.notes, "provenance": self.provenance,
+            "name": self.name,
+            "estimator": self.estimator,
+            "paired": self.paired,
+            "datasets": self.datasets,
+            "priors_match": self.priors_match,
+            "notes": self.notes,
+            "provenance": self.provenance,
             "skipped_cells": self.skipped_cells,
             "cells": {f"{i}x{p}": m for (i, p), m in sorted(self.cells.items())},
         }
@@ -79,7 +83,8 @@ def _datasets_text(ds: dict[str, Any]) -> str:
     if ds.get("kind") == "card":
         return "the card's own datasets (paired)"
     return "own simulated datasets, not the card's (unpaired): " + str(
-        ds.get("description") or "no description recorded")
+        ds.get("description") or "no description recorded"
+    )
 
 
 def load_reference(path: str | Path, inp: CardInputs) -> Reference:
@@ -99,19 +104,23 @@ def load_reference(path: str | Path, inp: CardInputs) -> Reference:
     where = f"Reference {path.name}"
     fmt = raw.get("reference_format")
     if fmt not in READS_REFERENCE_FORMAT:
-        raise ValueError(f"{where}: reference_format {fmt!r} is not one this "
-                         f"card reads ({READS_REFERENCE_FORMAT}).")
+        raise ValueError(
+            f"{where}: reference_format {fmt!r} is not one this "
+            f"card reads ({READS_REFERENCE_FORMAT})."
+        )
     for key in ("name", "estimator", "family", "datasets", "cells"):
         if key not in raw:
             raise ValueError(f"{where}: missing {key!r}.")
     family = str(inp.spec.get("model", "")).lower()
     if str(raw["family"]).lower() != family:
-        raise ValueError(f"{where}: family {raw['family']!r} differs from the "
-                         f"card's {family!r}.")
+        raise ValueError(
+            f"{where}: family {raw['family']!r} differs from the card's {family!r}."
+        )
     ds = raw["datasets"]
     if ds.get("kind") not in ("card", "own"):
-        raise ValueError(f"{where}: datasets.kind must be 'card' or 'own'; got "
-                         f"{ds.get('kind')!r}.")
+        raise ValueError(
+            f"{where}: datasets.kind must be 'card' or 'own'; got {ds.get('kind')!r}."
+        )
     if ds["kind"] == "card":
         proto = inp.record["protocol"]
         for key in ("seed", "protocol_version"):
@@ -119,7 +128,8 @@ def load_reference(path: str | Path, inp: CardInputs) -> Reference:
                 raise ValueError(
                     f"{where}: a paired reference must use the card's datasets, "
                     f"but its {key} {ds.get(key)!r} differs from the record's "
-                    f"{proto.get(key)!r}.")
+                    f"{proto.get(key)!r}."
+                )
     known = {m["key"] for m in dashboard_metrics(inp)}
     cells: dict[tuple[int, int], dict[str, list[float | None]]] = {}
     skipped = []
@@ -128,31 +138,47 @@ def load_reference(path: str | Path, inp: CardInputs) -> Reference:
         metrics = c.get("metrics") or {}
         unknown = sorted(set(metrics) - known)
         if unknown:
-            raise ValueError(f"{where}: cell {i}x{p} has metric keys the card "
-                             f"does not show: {', '.join(unknown)}.")
+            raise ValueError(
+                f"{where}: cell {i}x{p} has metric keys the card "
+                f"does not show: {', '.join(unknown)}."
+            )
         for k, v in metrics.items():
-            if not (isinstance(v, list) and len(v) == 2
-                    and all(x is None or isinstance(x, (int, float)) for x in v)):
-                raise ValueError(f"{where}: cell {i}x{p}, {k}: expected "
-                                 f"[value, mcse]; got {v!r}.")
+            if not (
+                isinstance(v, list)
+                and len(v) == 2
+                and all(x is None or isinstance(x, (int, float)) for x in v)
+            ):
+                raise ValueError(
+                    f"{where}: cell {i}x{p}, {k}: expected [value, mcse]; got {v!r}."
+                )
         if (i, p) in inp.cells:
-            cells[(i, p)] = {k: [None if x is None else float(x) for x in v]
-                             for k, v in metrics.items()}
+            cells[(i, p)] = {
+                k: [None if x is None else float(x) for x in v]
+                for k, v in metrics.items()
+            }
         else:
             skipped.append(f"{i}x{p}")
     if not cells:
         raise ValueError(f"{where}: none of its cells is a cell of this card.")
     priors = raw.get("priors")
     card_priors = inp.spec.get("priors")
-    priors_match = (None if priors is None or card_priors is None else
-                    json.dumps(priors, sort_keys=True)
-                    == json.dumps(card_priors, sort_keys=True))
+    priors_match = (
+        None
+        if priors is None or card_priors is None
+        else json.dumps(priors, sort_keys=True)
+        == json.dumps(card_priors, sort_keys=True)
+    )
     return Reference(
-        name=str(raw["name"]), estimator=str(raw["estimator"]),
-        paired=ds["kind"] == "card", datasets=_datasets_text(ds),
-        priors_match=priors_match, notes=dict(raw.get("notes") or {}),
-        provenance=dict(raw.get("provenance") or {}), cells=cells,
-        skipped_cells=skipped)
+        name=str(raw["name"]),
+        estimator=str(raw["estimator"]),
+        paired=ds["kind"] == "card",
+        datasets=_datasets_text(ds),
+        priors_match=priors_match,
+        notes=dict(raw.get("notes") or {}),
+        provenance=dict(raw.get("provenance") or {}),
+        cells=cells,
+        skipped_cells=skipped,
+    )
 
 
 def card_value(cell: dict[str, Any], m: dict[str, Any]) -> list[float | None] | None:
@@ -177,8 +203,9 @@ def card_value(cell: dict[str, Any], m: dict[str, Any]) -> list[float | None] | 
     return [float(v) - m["offset"], se]
 
 
-def difference(card: list[float | None] | None,
-               ref: list[float | None] | None) -> list[float | None] | None:
+def difference(
+    card: list[float | None] | None, ref: list[float | None] | None
+) -> list[float | None] | None:
     """Card minus reference, MCSE as for independent estimates.
 
     For a paired reference (same datasets) the covariance of the two
@@ -186,8 +213,11 @@ def difference(card: list[float | None] | None,
     """
     if card is None or ref is None or card[0] is None or ref[0] is None:
         return None
-    se = (None if card[1] is None or ref[1] is None
-          else (card[1] ** 2 + ref[1] ** 2) ** 0.5)
+    se = (
+        None
+        if card[1] is None or ref[1] is None
+        else (card[1] ** 2 + ref[1] ** 2) ** 0.5
+    )
     return [card[0] - ref[0], se]
 
 

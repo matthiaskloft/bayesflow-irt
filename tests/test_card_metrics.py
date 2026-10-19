@@ -86,8 +86,15 @@ def test_overconfident_posterior_is_caught():
 def test_mcse_matches_the_spread_over_replications():
     """The reported MCSEs describe the actual sampling spread."""
     rng = np.random.default_rng(3)
-    keys = ("bias", "rmse", "corr", "coverage_0.9", "width_0.95",
-            "mean_calibration_error", "sbc_ecdf_max_dev")
+    keys = (
+        "bias",
+        "rmse",
+        "corr",
+        "coverage_0.9",
+        "width_0.95",
+        "mean_calibration_error",
+        "sbc_ecdf_max_dev",
+    )
     est = {k: [] for k in keys}
     se = {k: [] for k in keys}
     for _ in range(150):

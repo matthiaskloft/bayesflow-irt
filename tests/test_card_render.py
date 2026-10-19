@@ -20,8 +20,12 @@ def card_dir(tmp_path_factory):
     """A small evaluated card: two in-range cells, sidecar next to the card."""
     root = tmp_path_factory.mktemp("card")
     ckpt = _setup(root, SMALL)
-    evaluate_for_card(ckpt, protocol=_protocol(), out=root / "m_card",
-                      approximator=FakeApproximator(sd=0.1))
+    evaluate_for_card(
+        ckpt,
+        protocol=_protocol(),
+        out=root / "m_card",
+        approximator=FakeApproximator(sd=0.1),
+    )
     return root / "m_card"
 
 
@@ -41,9 +45,17 @@ def _copy(card_dir, tmp_path, edit=None):
 def test_writes_the_card_and_its_figures(card_dir):
     path = render_model_card(card_dir)
     text = path.read_text("utf-8")
-    for heading in ("## Summary", "## The model", "## Supported data",
-                    "## Priors", "## Key metrics across cells", "## Limitations",
-                    "## Usage", "## Appendix: per-cell results", "## Provenance"):
+    for heading in (
+        "## Summary",
+        "## The model",
+        "## Supported data",
+        "## Priors",
+        "## Key metrics across cells",
+        "## Limitations",
+        "## Usage",
+        "## Appendix: per-cell results",
+        "## Provenance",
+    ):
         assert heading in text
     assert "P(y = 1) = sigmoid(a (theta - b))" in text
     assert cr.RELIABILITY_LABEL in text
@@ -83,8 +95,10 @@ def test_author_note_is_labelled(card_dir, tmp_path):
     md.setdefault("intended_use", {})["notes"] = "Example note."
     side.write_text(json.dumps(md), encoding="utf-8")
     text = cr.render_markdown(cr.load_card_inputs(out))
-    assert "> **Author's note** (written by the model's author, not generated): " \
+    assert (
+        "> **Author's note** (written by the model's author, not generated): "
         "Example note." in text
+    )
 
 
 def test_figures_are_byte_identical_across_renders(card_dir, tmp_path):
@@ -132,14 +146,16 @@ def test_sidecar_of_another_model_is_rejected(card_dir, tmp_path):
     out = _copy(card_dir, tmp_path)
     side = tmp_path / "m_metadata.json"
     md = MetadataTracker.load(side).to_dict()
-    md["model_spec"]["priors"] = {"theta": {"name": "normal", "loc": 1.0,
-                                            "scale": 1.0}}
+    md["model_spec"]["priors"] = {"theta": {"name": "normal", "loc": 1.0, "scale": 1.0}}
     side.write_text(json.dumps(md), encoding="utf-8")
     with pytest.raises(ValueError, match="model_spec differs"):
         cr.load_card_inputs(out)
     (tmp_path / "u").mkdir()
-    out = _copy(card_dir, tmp_path / "u", lambda r: r["metadata"].update(
-        metadata_uuid="someone-else"))
+    out = _copy(
+        card_dir,
+        tmp_path / "u",
+        lambda r: r["metadata"].update(metadata_uuid="someone-else"),
+    )
     md = MetadataTracker.load(card_dir.parent / "m_metadata.json").to_dict()
     md["metadata_uuid"] = "mine"
     (tmp_path / "u" / "m_metadata.json").write_text(json.dumps(md), encoding="utf-8")
@@ -148,8 +164,11 @@ def test_sidecar_of_another_model_is_rejected(card_dir, tmp_path):
 
 
 def test_sidecar_disagreeing_with_the_record_is_rejected(card_dir, tmp_path):
-    out = _edit_spec(card_dir, tmp_path, lambda s: s.update(
-        size_ranges={"n_items": [10, 50], "n_persons": [10, 500]}))
+    out = _edit_spec(
+        card_dir,
+        tmp_path,
+        lambda s: s.update(size_ranges={"n_items": [10, 50], "n_persons": [10, 500]}),
+    )
     with pytest.raises(ValueError, match="classified differently"):
         cr.load_card_inputs(out)
 
@@ -175,8 +194,10 @@ def test_development_and_incomplete_are_stamped(card_dir, tmp_path):
     def edit(rec):
         rec["protocol"]["preset_name"] = "development"
         rec["complete"] = False
-        rec["cells"][0] = {"cell": rec["cells"][0]["cell"],
-                           "failed": {"stage": "sampling", "message": "OOM"}}
+        rec["cells"][0] = {
+            "cell": rec["cells"][0]["cell"],
+            "failed": {"stage": "sampling", "message": "OOM"},
+        }
         rec.pop("failed_cells", None)
 
     text = cr.render_markdown(cr.load_card_inputs(_copy(card_dir, tmp_path, edit)))
@@ -201,22 +222,34 @@ def test_both_tarp_references_are_rendered(card_dir):
 
 def test_trained_map_reads_the_nested_axis_records(card_dir, tmp_path):
     sampling = {
-        "size_distribution": "uniform", "rule": "log_spaced_buckets+uniform",
-        "n_items": {"range": [5, 5], "bucket": None, "values": [5],
-                    "probabilities": [1.0]},
-        "n_persons": {"range": [10, 25], "bucket": 3, "values": None,
-                      "probabilities": None},
+        "size_distribution": "uniform",
+        "rule": "log_spaced_buckets+uniform",
+        "n_items": {
+            "range": [5, 5],
+            "bucket": None,
+            "values": [5],
+            "probabilities": [1.0],
+        },
+        "n_persons": {
+            "range": [10, 25],
+            "bucket": 3,
+            "values": None,
+            "probabilities": None,
+        },
     }
     out = _edit_spec(card_dir, tmp_path, lambda s: s.update(size_sampling=sampling))
     inp = cr.load_card_inputs(out)
     assert "needs matplotlib" in cr.render_markdown(inp)  # no figure passed
     assert "Training size sampling not recorded" not in cr.render_markdown(inp)
     assert cr._trained_map(inp, tmp_path / "map.png")
+
+
 def test_all_failed_record_renders(card_dir, tmp_path):
     def edit(rec):
-        rec["cells"] = [{"cell": c["cell"], "failed": {"stage": "sampling",
-                                                       "message": "OOM"}}
-                        for c in rec["cells"]]
+        rec["cells"] = [
+            {"cell": c["cell"], "failed": {"stage": "sampling", "message": "OOM"}}
+            for c in rec["cells"]
+        ]
 
     out = _copy(card_dir, tmp_path, edit)
     text = render_model_card(out).read_text("utf-8")
@@ -228,10 +261,11 @@ def test_item_posterior_limitation(card_dir, tmp_path):
     out = _copy(card_dir, tmp_path)
     side = tmp_path / "m_metadata.json"
     md = json.loads(side.read_text("utf-8"))
-    for value, expected in ((None, "item-posterior type is not recorded"),
-                            ("flow_matching", "joint statements across items are "
-                                              "overconfident"),
-                            ("autoregressive_coupling_flow", None)):
+    for value, expected in (
+        (None, "item-posterior type is not recorded"),
+        ("flow_matching", "joint statements across items are overconfident"),
+        ("autoregressive_coupling_flow", None),
+    ):
         md.setdefault("architecture", {})["item_posterior"] = value
         side.write_text(json.dumps(md), encoding="utf-8")
         text = cr.render_markdown(cr.load_card_inputs(out))
@@ -248,8 +282,12 @@ def test_pcm_card(tmp_path):
     ckpt = tmp_path / "p.keras"
     ckpt.write_bytes(b"not a real checkpoint")
     (tmp_path / "p_metadata.json").write_text(json.dumps(md), encoding="utf-8")
-    evaluate_for_card(ckpt, protocol=_protocol(), out=tmp_path / "p_card",
-                      approximator=FakeApproximator(sd=0.1))
+    evaluate_for_card(
+        ckpt,
+        protocol=_protocol(),
+        out=tmp_path / "p_card",
+        approximator=FakeApproximator(sd=0.1),
+    )
     text = render_model_card(tmp_path / "p_card").read_text("utf-8")
     assert "delta: coverage at 0.95 minus 0.95" in text
     assert "log_a" not in text
@@ -285,8 +323,10 @@ def test_without_matplotlib_tables_only(card_dir, tmp_path, monkeypatch):
 
 def test_failed_and_extrapolated_cells_are_shown(card_dir, tmp_path):
     def edit(rec):
-        rec["cells"][1] = {"cell": rec["cells"][1]["cell"],
-                           "failed": {"stage": "sampling", "message": "OOM"}}
+        rec["cells"][1] = {
+            "cell": rec["cells"][1]["cell"],
+            "failed": {"stage": "sampling", "message": "OOM"},
+        }
         far = copy.deepcopy(rec["cells"][0])
         far["cell"] = {"n_items": 3, "n_persons": 10, "in_range": False}
         rec["cells"].append(far)

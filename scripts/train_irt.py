@@ -361,9 +361,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = json.loads(args.config.read_text(encoding="utf-8"))
     tag = args.tag or cfg.get("tag") or f"{cfg['model'].lower()}_{cfg['variant']}"
-    out_dir = Path(
-        args.out_dir or cfg.get("out_dir", REPO_ROOT / "models_trained")
-    )
+    out_dir = Path(args.out_dir or cfg.get("out_dir", REPO_ROOT / "models_trained"))
     (out_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
 
     t = cfg["training"]

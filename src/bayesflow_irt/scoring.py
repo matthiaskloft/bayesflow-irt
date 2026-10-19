@@ -264,14 +264,10 @@ def _mixture_weights_torch(
                     ll = torch.einsum("pi,sgi->spg", r[p0:p1], logits)
                 ll = ll - torch.einsum("pi,sgi->spg", o[p0:p1], norm)
                 log_mass = ll + log_w
-                post = torch.exp(
-                    log_mass - torch.logsumexp(log_mass, -1, keepdim=True)
-                )
+                post = torch.exp(log_mass - torch.logsumexp(log_mass, -1, keepdim=True))
                 total[p0:p1] += post.sum(0)
                 if on_post is not None:
-                    on_post(
-                        start, stop, _to_float64(post), slice(p0, p1)
-                    )
+                    on_post(start, stop, _to_float64(post), slice(p0, p1))
                 if window is not None:
                     out_mask = (grid[None, :] < w_lo[p0:p1, None]) | (
                         grid[None, :] > w_hi[p0:p1, None]
@@ -324,7 +320,7 @@ def _mixture_weights_torch(
             total[p0:p1] += post.sum(0)
             if on_post is not None:
                 on_post(start, stop, _to_float64(post), slice(p0, p1))
-    weights =(total / n_samples).cpu().numpy().astype(np.float64)
+    weights = (total / n_samples).cpu().numpy().astype(np.float64)
     if window is None:
         return weights
     return weights, (
@@ -909,8 +905,7 @@ def _log_likelihood_all_persons(
         n_items = delta.shape[0]
         block = max(
             1,
-            _POLYTOMOUS_PERSON_GRID_BLOCK_ELEMENTS
-            // (n_grid * n_items * n_categories),
+            _POLYTOMOUS_PERSON_GRID_BLOCK_ELEMENTS // (n_grid * n_items * n_categories),
         )
         for start in range(0, n_persons, block):
             stop = min(start + block, n_persons)
@@ -1010,8 +1005,7 @@ def _log_likelihood_binary_chunk_person_grids(
     slope = responses_filled @ a_chunk.T  # (P, S)
     offset = responses_filled @ (a_chunk * b_chunk).T  # (P, S)
     out = (
-        theta[np.newaxis, :, :] * slope.T[:, :, np.newaxis]
-        - offset.T[:, :, np.newaxis]
+        theta[np.newaxis, :, :] * slope.T[:, :, np.newaxis] - offset.T[:, :, np.newaxis]
     )
 
     block = max(1, _PERSON_GRID_BLOCK_ELEMENTS // (n_draws * n_grid * n_items))
@@ -2951,8 +2945,7 @@ class PersonScorer:
                 mean_p, sd_p = _grid_mean_sd(theta_grid, mixture_weights)
                 grid_spacing = theta_grid[:, 1] - theta_grid[:, 0]
                 todo = np.flatnonzero(
-                    (grid_spacing > _ADAPTIVE_GRID_MAX_SPACING_SD * sd_p)
-                    & ~uncontained
+                    (grid_spacing > _ADAPTIVE_GRID_MAX_SPACING_SD * sd_p) & ~uncontained
                 )
                 if todo.size == 0:
                     break
@@ -3030,9 +3023,7 @@ class PersonScorer:
             hdi_levels=aggregated["hdi_levels"],
             theta_grid=out_grid,
             theta_posterior_mass=out_mass,
-            theta_window_uncontained=(
-                uncontained.copy() if requested else None
-            ),
+            theta_window_uncontained=(uncontained.copy() if requested else None),
             theta_draws=theta_draws,
             item_draws=(
                 dict(self._item_posteriors) if theta_draws is not None else None

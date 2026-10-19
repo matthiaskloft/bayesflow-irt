@@ -109,11 +109,33 @@ def sbc_band(num_estimates: int, confidence: float = 0.95) -> dict[str, list[flo
     return {"grid": z.tolist(), "lower": (lo / n).tolist(), "upper": (hi / n).tolist()}
 
 
-def _metric(key, tab, label, path, kind, limits, guide, *, offset=0.0,
-            index=None, se_path=None, floor_path=None) -> dict[str, Any]:
-    return {"key": key, "tab": tab, "label": label, "path": path, "kind": kind,
-            "limits": list(limits), "guide": guide, "offset": offset,
-            "index": index, "se_path": se_path, "floor_path": floor_path}
+def _metric(
+    key,
+    tab,
+    label,
+    path,
+    kind,
+    limits,
+    guide,
+    *,
+    offset=0.0,
+    index=None,
+    se_path=None,
+    floor_path=None,
+) -> dict[str, Any]:
+    return {
+        "key": key,
+        "tab": tab,
+        "label": label,
+        "path": path,
+        "kind": kind,
+        "limits": list(limits),
+        "guide": guide,
+        "offset": offset,
+        "index": index,
+        "se_path": se_path,
+        "floor_path": floor_path,
+    }
 
 
 #: Note every colour limit carries: a display range, not a threshold.
@@ -125,95 +147,112 @@ LIMITS_NOTE = (
 
 #: APA 7 entries (from references.md) cited on the dashboard pages.
 _REFS = {
-    'birnbaum': (
-        'Birnbaum, A. (1968). Some latent trait models and their use in '
+    "birnbaum": (
+        "Birnbaum, A. (1968). Some latent trait models and their use in "
         "inferring an examinee's ability. In F. M. Lord & M. R. Novick (Eds.), "
-        '*Statistical theories of mental test scores* (pp. 395-479). '
-        'Addison-Wesley'
+        "*Statistical theories of mental test scores* (pp. 395-479). "
+        "Addison-Wesley"
     ),
-    'masters': (
-        'Masters, G. N. (1982). A Rasch model for partial credit scoring. '
-        '*Psychometrika, 47*(2), 149-174. https://doi.org/10.1007/BF02296272'
+    "masters": (
+        "Masters, G. N. (1982). A Rasch model for partial credit scoring. "
+        "*Psychometrika, 47*(2), 149-174. https://doi.org/10.1007/BF02296272"
     ),
-    'muraki': (
-        'Muraki, E. (1992). A generalized partial credit model: Application of '
-        'an EM algorithm. *Applied Psychological Measurement, 16*(2), 159-176. '
-        'https://doi.org/10.1177/014662169201600206'
+    "muraki": (
+        "Muraki, E. (1992). A generalized partial credit model: Application of "
+        "an EM algorithm. *Applied Psychological Measurement, 16*(2), 159-176. "
+        "https://doi.org/10.1177/014662169201600206"
     ),
-    'bayesflow': (
-        'Kühmichel, L., Huang, J. M., Pratz, V., Arruda, J., Olischläger, H., '
-        'Habermann, D., Kucharsky, S., Elsemüller, L., Mishra, A., Bracher, N., '
-        'Jedhoff, S., Schmitt, M., Bürkner, P.-C., & Radev, S. T. (2026). '
-        '*BayesFlow 2: Multi-backend amortized Bayesian inference in Python*. '
-        'arXiv. https://doi.org/10.48550/arXiv.2602.07098'
+    "bayesflow": (
+        "Kühmichel, L., Huang, J. M., Pratz, V., Arruda, J., Olischläger, H., "
+        "Habermann, D., Kucharsky, S., Elsemüller, L., Mishra, A., Bracher, N., "
+        "Jedhoff, S., Schmitt, M., Bürkner, P.-C., & Radev, S. T. (2026). "
+        "*BayesFlow 2: Multi-backend amortized Bayesian inference in Python*. "
+        "arXiv. https://doi.org/10.48550/arXiv.2602.07098"
     ),
-    'morris': (
-        'Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using '
-        'simulation studies to evaluate statistical methods. *Statistics in '
-        'Medicine, 38*(11), 2074–2102. https://doi.org/10.1002/sim.8086'
+    "morris": (
+        "Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using "
+        "simulation studies to evaluate statistical methods. *Statistics in "
+        "Medicine, 38*(11), 2074–2102. https://doi.org/10.1002/sim.8086"
     ),
-    'cameron': (
+    "cameron": (
         "Cameron, A. C., & Miller, D. L. (2015). A practitioner's guide to "
-        'cluster-robust inference. *Journal of Human Resources, 50*(2), '
-        '317–372. https://doi.org/10.3368/jhr.50.2.317'
+        "cluster-robust inference. *Journal of Human Resources, 50*(2), "
+        "317–372. https://doi.org/10.3368/jhr.50.2.317"
     ),
-    'talts': (
-        'Talts, S., Betancourt, M., Simpson, D., Vehtari, A., & Gelman, A. '
-        '(2018). *Validating Bayesian inference algorithms with '
-        'simulation-based calibration*. arXiv. https://arxiv.org/abs/1804.06788'
+    "talts": (
+        "Talts, S., Betancourt, M., Simpson, D., Vehtari, A., & Gelman, A. "
+        "(2018). *Validating Bayesian inference algorithms with "
+        "simulation-based calibration*. arXiv. https://arxiv.org/abs/1804.06788"
     ),
-    'sailynoja': (
-        'Säilynoja, T., Bürkner, P.-C., & Vehtari, A. (2022). Graphical test '
-        'for discrete uniformity and its applications in goodness-of-fit '
-        'evaluation and multiple sample comparison. *Statistics and Computing, '
-        '32*(2), Article 32. https://doi.org/10.1007/s11222-022-10090-6'
+    "sailynoja": (
+        "Säilynoja, T., Bürkner, P.-C., & Vehtari, A. (2022). Graphical test "
+        "for discrete uniformity and its applications in goodness-of-fit "
+        "evaluation and multiple sample comparison. *Statistics and Computing, "
+        "32*(2), Article 32. https://doi.org/10.1007/s11222-022-10090-6"
     ),
-    'lemos': (
-        'Lemos, P., Coogan, A., Hezaveh, Y., & Perreault-Levasseur, L. (2023). '
-        'Sampling-based accuracy testing of posterior estimators for general '
-        'inference. In *Proceedings of the 40th International Conference on '
-        'Machine Learning* (PMLR 202, pp. 19256–19273). '
-        'https://proceedings.mlr.press/v202/lemos23a.html'
+    "lemos": (
+        "Lemos, P., Coogan, A., Hezaveh, Y., & Perreault-Levasseur, L. (2023). "
+        "Sampling-based accuracy testing of posterior estimators for general "
+        "inference. In *Proceedings of the 40th International Conference on "
+        "Machine Learning* (PMLR 202, pp. 19256–19273). "
+        "https://proceedings.mlr.press/v202/lemos23a.html"
     ),
-    'wilson': (
-        'Wilson, E. B. (1927). Probable inference, the law of succession, and '
-        'statistical inference. *Journal of the American Statistical '
-        'Association, 22*(158), 209–212. '
-        'https://doi.org/10.1080/01621459.1927.10502953'
+    "wilson": (
+        "Wilson, E. B. (1927). Probable inference, the law of succession, and "
+        "statistical inference. *Journal of the American Statistical "
+        "Association, 22*(158), 209–212. "
+        "https://doi.org/10.1080/01621459.1927.10502953"
     ),
-    'okabe': (
-        'Okabe, M., & Ito, K. (2008). *Color universal design (CUD): How to '
-        'make figures and presentations that are friendly to colorblind '
-        'people*. https://jfly.uni-koeln.de/color/'
+    "okabe": (
+        "Okabe, M., & Ito, K. (2008). *Color universal design (CUD): How to "
+        "make figures and presentations that are friendly to colorblind "
+        "people*. https://jfly.uni-koeln.de/color/"
     ),
 }
 #: What each page cites, as (topic, entry); the model page adds its
 #: family's source.
 _PAGE_REFS = {
-    "overview": [("Monte Carlo standard errors", "morris"),
-                 ("Colour palette", "okabe")],
+    "overview": [
+        ("Monte Carlo standard errors", "morris"),
+        ("Colour palette", "okabe"),
+    ],
     "model": [("Neural posterior estimation (BayesFlow)", "bayesflow")],
-    "recovery": [("Monte Carlo standard errors", "morris"),
-                 ("Posterior contraction", "bayesflow"),
-                 ("Cluster-robust MCSE of the theta bins", "cameron")],
-    "calibration": [("Simulation-based calibration (SBC)", "talts"),
-                    ("SBC ECDF difference and its band", "sailynoja"),
-                    ("TARP", "lemos"),
-                    ("Monte Carlo standard errors", "morris"),
-                    ("Wilson intervals of the theta bins", "wilson"),
-                    ("Cluster-robust intervals of the theta bins", "cameron")],
+    "recovery": [
+        ("Monte Carlo standard errors", "morris"),
+        ("Posterior contraction", "bayesflow"),
+        ("Cluster-robust MCSE of the theta bins", "cameron"),
+    ],
+    "calibration": [
+        ("Simulation-based calibration (SBC)", "talts"),
+        ("SBC ECDF difference and its band", "sailynoja"),
+        ("TARP", "lemos"),
+        ("Monte Carlo standard errors", "morris"),
+        ("Wilson intervals of the theta bins", "wilson"),
+        ("Cluster-robust intervals of the theta bins", "cameron"),
+    ],
 }
-_FAMILY_REFS = {"1pl": "birnbaum", "2pl": "birnbaum", "pcm": "masters",
-                "gpcm": "muraki"}
+_FAMILY_REFS = {
+    "1pl": "birnbaum",
+    "2pl": "birnbaum",
+    "pcm": "masters",
+    "gpcm": "muraki",
+}
 
 
 def page_references(family: str) -> dict[str, list[dict[str, str]]]:
     """The references at the end of each dashboard page, with their topic."""
-    out = {page: [{"topic": t, "text": _REFS[k]} for t, k in pairs]
-           for page, pairs in _PAGE_REFS.items()}
+    out = {
+        page: [{"topic": t, "text": _REFS[k]} for t, k in pairs]
+        for page, pairs in _PAGE_REFS.items()
+    }
     if family in _FAMILY_REFS:
-        out["model"].insert(0, {"topic": f"{family.upper()} response model",
-                                "text": _REFS[_FAMILY_REFS[family]]})
+        out["model"].insert(
+            0,
+            {
+                "topic": f"{family.upper()} response model",
+                "text": _REFS[_FAMILY_REFS[family]],
+            },
+        )
     return out
 
 
@@ -234,8 +273,9 @@ def prior_width(inp: CardInputs, param: str) -> float | None:
     if not isinstance(rec, dict):
         return None
     sampler = resolve_prior(_prior_from_record(rec, role), role)
-    x = np.asarray(sampler((PRIOR_DENSITY_DRAWS,), np.random.default_rng(0)),
-                   dtype=float).ravel()
+    x = np.asarray(
+        sampler((PRIOR_DENSITY_DRAWS,), np.random.default_rng(0)), dtype=float
+    ).ravel()
     if param == "log_a":
         x = np.log(x)
     lo, hi = np.quantile(x, [0.025, 0.975])
@@ -245,8 +285,9 @@ def prior_width(inp: CardInputs, param: str) -> float | None:
 def _extreme_share(inp: CardInputs, c: dict[str, Any]) -> list[float | None]:
     """Share of scored persons with an all-extreme pattern, ``[value, None]``."""
     prot = inp.record["protocol"]
-    scored = prot["datasets_per_cell"] * min(prot["persons_scored"],
-                                             c["cell"]["n_persons"])
+    scored = prot["datasets_per_cell"] * min(
+        prot["persons_scored"], c["cell"]["n_persons"]
+    )
     count = c.get("persons", {}).get("extreme_patterns")
     return [count / scored if count is not None and scored else None, None]
 
@@ -271,100 +312,175 @@ def dashboard_metrics(inp: CardInputs) -> list[dict[str, Any]]:
         group = ["persons", "theta"] if param == "theta" else ["items", param]
         for level in CARD_LEVELS:
             m = base[f"{param}.coverage_dev_0.95"]
-            out.append(_metric(
-                f"{param}.coverage_dev_{level}", tab,
-                f"{param}: coverage at {level} minus {level}",
-                [*group, f"coverage_{level}"], "deviation", m.limits,
-                m.guide.replace("95%", f"{level * 100:g}%").replace(
-                    "0.95", str(level)),
-                offset=level))
+            out.append(
+                _metric(
+                    f"{param}.coverage_dev_{level}",
+                    tab,
+                    f"{param}: coverage at {level} minus {level}",
+                    [*group, f"coverage_{level}"],
+                    "deviation",
+                    m.limits,
+                    m.guide.replace("95%", f"{level * 100:g}%").replace(
+                        "0.95", str(level)
+                    ),
+                    offset=level,
+                )
+            )
         for k in ("mean_calibration_error", "nrmse_excess", "corr", "contraction"):
             m = base[f"{param}.{k}"]
-            out.append(_metric(m.key, tab, m.label, [*group, k], m.kind,
-                               m.limits, m.guide))
-        out.append(_metric(
-            f"{param}.sbc_ecdf_max_dev", tab, f"{param}: SBC ECDF maximum deviation",
-            [*group, "sbc_ecdf_max_dev"], "magnitude", (0.0, 0.25),
-            "Largest gap between the ECDF of the posterior ranks and the "
-            "uniform CDF on the 39-point grid (Talts et al., 2018). Zero is "
-            "uniform."))
+            out.append(
+                _metric(m.key, tab, m.label, [*group, k], m.kind, m.limits, m.guide)
+            )
+        out.append(
+            _metric(
+                f"{param}.sbc_ecdf_max_dev",
+                tab,
+                f"{param}: SBC ECDF maximum deviation",
+                [*group, "sbc_ecdf_max_dev"],
+                "magnitude",
+                (0.0, 0.25),
+                "Largest gap between the ECDF of the posterior ranks and the "
+                "uniform CDF on the 39-point grid (Talts et al., 2018). Zero is "
+                "uniform.",
+            )
+        )
         width = prior_width(inp, param)
-        out.append(_metric(
-            f"{param}.width_0.95", tab, f"{param}: width of the 95% interval",
-            [*group, "width_0.95"], "magnitude", (0.0, width or 1.0),
-            "Mean width of the central 95% interval, in the parameter's units. "
-            "Narrower is more informative only when coverage is nominal."
-            + (f" The prior's own 95% width is {width}." if width else "")))
+        out.append(
+            _metric(
+                f"{param}.width_0.95",
+                tab,
+                f"{param}: width of the 95% interval",
+                [*group, "width_0.95"],
+                "magnitude",
+                (0.0, width or 1.0),
+                "Mean width of the central 95% interval, in the parameter's units. "
+                "Narrower is more informative only when coverage is nominal."
+                + (f" The prior's own 95% width is {width}." if width else ""),
+            )
+        )
     rel_guides = {
-        "posterior_variance": ("magnitude", (0.0, 1.0),
-                               "1 - mean posterior variance / prior variance."),
-        "squared_correlation": ("magnitude", (0.0, 1.0),
-                                "Squared correlation of posterior mean and true "
-                                "theta over the scored persons."),
-        "difference": ("deviation", (-0.5, 0.5),
-                       "Posterior-variance reliability minus squared correlation; "
-                       "zero when the two agree."),
-        "information": ("magnitude", (0.0, 1.0),
-                        "Information-based marginal reliability "
-                        "sigma^2 / (sigma^2 + MSEM), MSEM = E[1 / J(theta)] "
-                        "over the theta prior (Lee, 2026, Eq. A.5), from the "
-                        "generating items."),
+        "posterior_variance": (
+            "magnitude",
+            (0.0, 1.0),
+            "1 - mean posterior variance / prior variance.",
+        ),
+        "squared_correlation": (
+            "magnitude",
+            (0.0, 1.0),
+            "Squared correlation of posterior mean and true "
+            "theta over the scored persons.",
+        ),
+        "difference": (
+            "deviation",
+            (-0.5, 0.5),
+            "Posterior-variance reliability minus squared correlation; "
+            "zero when the two agree.",
+        ),
+        "information": (
+            "magnitude",
+            (0.0, 1.0),
+            "Information-based marginal reliability "
+            "sigma^2 / (sigma^2 + MSEM), MSEM = E[1 / J(theta)] "
+            "over the theta prior (Lee, 2026, Eq. A.5), from the "
+            "generating items.",
+        ),
     }
     for name, (kind, limits, guide) in rel_guides.items():
-        out.append(_metric(
-            f"theta.reliability_{name}", "persons",
-            f"theta: reliability, {name} ({RELIABILITY_LABEL})",
-            ["persons", "reliability", name, "mean"], kind, limits,
-            f"{guide} {RELIABILITY_LABEL}."))
-    out.append(_metric(
-        "theta.extreme_share", "persons",
-        "theta: share of all-extreme response patterns",
-        ["derived", "extreme_share"], "magnitude", (0.0, 1.0),
-        "Share of scored persons whose responses are all lowest or all "
-        "highest."))
+        out.append(
+            _metric(
+                f"theta.reliability_{name}",
+                "persons",
+                f"theta: reliability, {name} ({RELIABILITY_LABEL})",
+                ["persons", "reliability", name, "mean"],
+                kind,
+                limits,
+                f"{guide} {RELIABILITY_LABEL}.",
+            )
+        )
+    out.append(
+        _metric(
+            "theta.extreme_share",
+            "persons",
+            "theta: share of all-extreme response patterns",
+            ["derived", "extreme_share"],
+            "magnitude",
+            (0.0, 1.0),
+            "Share of scored persons whose responses are all lowest or all highest.",
+        )
+    )
     if not inp.joint_omitted:
         for ref in ("random", "classical"):
-            out.append(_metric(
-                f"joint.tarp_{ref}", "joint",
-                f"joint: TARP error, {REF_LABELS[ref]} references",
-                ["joint", "tarp", ref, "tarp_error"], "magnitude", (0.0, 0.25),
-                "Deviation of the TARP coverage curve from the diagonal, jointly "
-                "over all items. An exact posterior still scores about the "
-                "cell's null floor (finite draws and datasets), shown with each "
-                "value, not zero." + (
-                    " Random references cannot detect an estimator that returns "
-                    "the prior (Lemos et al., 2023, Sec. 4.3); read it with the "
-                    "CTT-statistic-reference error." if ref == "random" else
-                    " Data-dependent references from classical test theory item "
-                    "statistics detect a posterior "
-                    "that ignores the data (Lemos et al., 2023, Sec. 4.3)."),
-                floor_path=["joint", "tarp", ref, "null_floor"]))
-        thetas = next((c["joint"]["tcc"]["thetas"] for c in inp.evaluated()
-                       if c.get("joint", {}).get("tcc")), [])
+            out.append(
+                _metric(
+                    f"joint.tarp_{ref}",
+                    "joint",
+                    f"joint: TARP error, {REF_LABELS[ref]} references",
+                    ["joint", "tarp", ref, "tarp_error"],
+                    "magnitude",
+                    (0.0, 0.25),
+                    "Deviation of the TARP coverage curve from the diagonal, jointly "
+                    "over all items. An exact posterior still scores about the "
+                    "cell's null floor (finite draws and datasets), shown with each "
+                    "value, not zero."
+                    + (
+                        " Random references cannot detect an estimator that returns "
+                        "the prior (Lemos et al., 2023, Sec. 4.3); read it with the "
+                        "CTT-statistic-reference error."
+                        if ref == "random"
+                        else " Data-dependent references from classical test "
+                        "theory item "
+                        "statistics detect a posterior "
+                        "that ignores the data (Lemos et al., 2023, Sec. 4.3)."
+                    ),
+                    floor_path=["joint", "tarp", ref, "null_floor"],
+                )
+            )
+        thetas = next(
+            (
+                c["joint"]["tcc"]["thetas"]
+                for c in inp.evaluated()
+                if c.get("joint", {}).get("tcc")
+            ),
+            [],
+        )
         for k, theta in enumerate(thetas):
-            out.append(_metric(
-                f"joint.tcc_bias_{theta:g}", "joint",
-                f"joint: TCC bias at theta = {theta:g}",
-                ["joint", "tcc", "d_mean"], "deviation", (-0.05, 0.05),
-                "Posterior-mean test characteristic curve minus the true one at "
-                "this theta, divided by the number of items (proportion-correct "
-                "scale; shown as a point, not a curve). Zero is unbiased.",
-                index=k, se_path=["joint", "tcc", "d_mean_se"]))
+            out.append(
+                _metric(
+                    f"joint.tcc_bias_{theta:g}",
+                    "joint",
+                    f"joint: TCC bias at theta = {theta:g}",
+                    ["joint", "tcc", "d_mean"],
+                    "deviation",
+                    (-0.05, 0.05),
+                    "Posterior-mean test characteristic curve minus the true one at "
+                    "this theta, divided by the number of items (proportion-correct "
+                    "scale; shown as a point, not a curve). Zero is unbiased.",
+                    index=k,
+                    se_path=["joint", "tcc", "d_mean_se"],
+                )
+            )
     calibration = ("coverage_dev_", "mean_calibration_error", "sbc_ecdf", "tarp_")
     for m in out:
         # Dashboard page: does the posterior's uncertainty match its error
         # (calibration), or how close and how precise is it (recovery)?
-        m["axis"] = ("calibration" if any(k in m["key"] for k in calibration)
-                     else "recovery")
+        m["axis"] = (
+            "calibration" if any(k in m["key"] for k in calibration) else "recovery"
+        )
     return out
 
 
 def _bins(c: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for b in c.get("persons", {}).get("conditional") or []:
-        out.append({"edges": b["edges"], "n": int(b.get("n", 0)),
-                    "clusters": b.get("clusters"), "bias": b.get("bias"),
-                    **bin_coverage(b)})
+        out.append(
+            {
+                "edges": b["edges"],
+                "n": int(b.get("n", 0)),
+                "clusters": b.get("clusters"),
+                "bias": b.get("bias"),
+                **bin_coverage(b),
+            }
+        )
     return out
 
 
@@ -381,8 +497,14 @@ def _md_table_rows(table: str) -> list[list[str]]:
 
 #: Bookkeeping in a serialized Keras config that says nothing about the
 #: architecture.
-_CONFIG_SKIP = {"name", "trainable", "dtype", "seed_generator", "build_config",
-                "compile_config"}
+_CONFIG_SKIP = {
+    "name",
+    "trainable",
+    "dtype",
+    "seed_generator",
+    "build_config",
+    "compile_config",
+}
 
 
 def _config_rows(cfg: dict[str, Any], prefix: str = "") -> list[list[str]]:
@@ -405,14 +527,22 @@ def _config_rows(cfg: dict[str, Any], prefix: str = "") -> list[list[str]]:
             rows += _config_rows(v.get("config") or {}, key + ".")
         elif isinstance(v, dict):
             rows += _config_rows(v, key + ".")
-        elif isinstance(v, list) and v and all(
-                isinstance(x, dict) and "class_name" in x for x in v):
+        elif (
+            isinstance(v, list)
+            and v
+            and all(isinstance(x, dict) and "class_name" in x for x in v)
+        ):
             rows.append([key, ", ".join(str(x["class_name"]) for x in v)])
             for n, x in enumerate(v):
                 rows += _config_rows(x.get("config") or {}, f"{key}[{n}].")
         else:
-            text = (json.dumps(v) if isinstance(v, (list, dict, bool))
-                    else "None" if v is None else str(v))
+            text = (
+                json.dumps(v)
+                if isinstance(v, (list, dict, bool))
+                else "None"
+                if v is None
+                else str(v)
+            )
             rows.append([key, text])
     return rows
 
@@ -428,8 +558,11 @@ def network_groups(record: dict[str, Any]) -> list[dict[str, Any]] | None:
         return None
     top = net["config"]
     cfg = top.get("config") or {}
-    parts = {"summary_network": "Summary network",
-             "inference_network": "Inference network", "adapter": "Adapter"}
+    parts = {
+        "summary_network": "Summary network",
+        "inference_network": "Inference network",
+        "adapter": "Adapter",
+    }
     own = {k: v for k, v in cfg.items() if k not in parts}
     rows = _config_rows(own)
     if net.get("n_parameters") is not None:
@@ -438,8 +571,12 @@ def network_groups(record: dict[str, Any]) -> list[dict[str, Any]] | None:
     for k, title in parts.items():
         sub = cfg.get(k)
         if isinstance(sub, dict) and "class_name" in sub:
-            out.append({"title": f"{title} ({sub['class_name']})",
-                        "rows": _config_rows(sub.get("config") or {})})
+            out.append(
+                {
+                    "title": f"{title} ({sub['class_name']})",
+                    "rows": _config_rows(sub.get("config") or {}),
+                }
+            )
     out.append({"source": net.get("source")})
     return out
 
@@ -463,15 +600,17 @@ def prior_density_curves(inp: CardInputs, bins: int = 80) -> list[dict[str, Any]
         x = np.asarray(sampler((PRIOR_DENSITY_DRAWS,), np.random.default_rng(0)))
         lo, hi = np.quantile(x, [0.001, 0.999])
         dens, edges = np.histogram(x, bins=bins, range=(lo, hi), density=True)
-        out.append({
-            "role": role,
-            "label": f"{role} ~ {rec['name']}("
-                     + ", ".join(f"{k} = {v}" for k, v in rec.items() if k != "name")
-                     + ")",
-            "x": ((edges[:-1] + edges[1:]) / 2).round(5).tolist(),
-            "y": dens.round(5).tolist(),
-            "interval": np.quantile(x, [0.025, 0.975]).round(4).tolist(),
-        })
+        out.append(
+            {
+                "role": role,
+                "label": f"{role} ~ {rec['name']}("
+                + ", ".join(f"{k} = {v}" for k, v in rec.items() if k != "name")
+                + ")",
+                "x": ((edges[:-1] + edges[1:]) / 2).round(5).tolist(),
+                "y": dens.round(5).tolist(),
+                "interval": np.quantile(x, [0.025, 0.975]).round(4).tolist(),
+            }
+        )
     return out
 
 
@@ -488,8 +627,9 @@ def _size_bins(values: Any, probs: Any, max_bins: int) -> dict[str, list]:
     if v.size > max_bins:
         cuts = np.linspace(lv[0], lv[-1], max_bins + 1)
         idx = np.clip(np.searchsorted(cuts, lv, side="right") - 1, 0, max_bins - 1)
-        groups = [g for g in (np.flatnonzero(idx == b) for b in range(max_bins))
-                  if g.size]
+        groups = [
+            g for g in (np.flatnonzero(idx == b) for b in range(max_bins)) if g.size
+        ]
     else:
         groups = [np.array([i]) for i in range(v.size)]
     lo = np.array([lv[g[0]] for g in groups])
@@ -497,8 +637,9 @@ def _size_bins(values: Any, probs: Any, max_bins: int) -> dict[str, list]:
     mids = (hi[:-1] + lo[1:]) / 2
     pad = (mids[0] - lo[0]) if mids.size else 0.1
     pad_hi = (hi[-1] - mids[-1]) if mids.size else 0.1
-    edges = np.concatenate([[lo[0] - max(pad, 0.05)], mids,
-                            [hi[-1] + max(pad_hi, 0.05)]])
+    edges = np.concatenate(
+        [[lo[0] - max(pad, 0.05)], mids, [hi[-1] + max(pad_hi, 0.05)]]
+    )
     return {
         "edges": np.exp(edges).round(3).tolist(),
         "lo": [int(v[g[0]]) for g in groups],
@@ -523,8 +664,10 @@ def trained_size_map(inp: CardInputs, max_bins: int = 60) -> dict[str, Any] | No
         "distribution": marginals["distribution"],
         "items": _size_bins(*marginals["items"], max_bins),
         "persons": _size_bins(*marginals["persons"], max_bins),
-        "grid": {"items": [int(i) for i in inp.items_axis],
-                 "persons": [int(p) for p in inp.persons_axis]},
+        "grid": {
+            "items": [int(i) for i in inp.items_axis],
+            "persons": [int(p) for p in inp.persons_axis],
+        },
     }
 
 
@@ -541,9 +684,14 @@ def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str,
         # Per-dataset pairs stay in evaluation.json until a plot uses them.
         for group in ("items", "persons"):
             if isinstance(entry.get(group), dict):
-                entry[group] = {p: ({k: x for k, x in g.items() if k != "pairs"}
-                                    if isinstance(g, dict) else g)
-                                for p, g in entry[group].items()}
+                entry[group] = {
+                    p: (
+                        {k: x for k, x in g.items() if k != "pairs"}
+                        if isinstance(g, dict)
+                        else g
+                    )
+                    for p, g in entry[group].items()
+                }
         entry["bins"] = _bins(c)
         if "failed" not in c:
             entry["derived"] = {"extreme_share": _extreme_share(inp, c)}
@@ -556,7 +704,7 @@ def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str,
                 figures[name] = uri
     return {
         "title": f"Model card: {_or_unrecorded(spec.get('model'))} "
-                 f"({_or_unrecorded(spec.get('variant'))})",
+        f"({_or_unrecorded(spec.get('variant'))})",
         "identity": _md_table_rows(_identity(inp)),
         "pill": _or_unrecorded(ck.get("match")),
         "banners": status_banners(inp),
@@ -590,8 +738,12 @@ def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str,
             "sidecar_provenance": md.get("provenance") or {},
             "seconds": rec.get("seconds"),
         },
-        "axes": {"items": inp.items_axis, "persons": inp.persons_axis,
-                 "in_items": inp.in_items, "in_persons": inp.in_persons},
+        "axes": {
+            "items": inp.items_axis,
+            "persons": inp.persons_axis,
+            "in_items": inp.in_items,
+            "in_persons": inp.in_persons,
+        },
         "include_out_of_range": bool(rec["protocol"].get("include_out_of_range")),
         "parameters": [*inp.parameters, "theta"],
         "levels": list(CARD_LEVELS),
@@ -607,27 +759,35 @@ def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str,
 
 
 def _asset(name: str) -> str:
-    return resources.files("bayesflow_irt").joinpath("_card_assets", name).read_text(
-        encoding="utf-8"
+    return (
+        resources.files("bayesflow_irt")
+        .joinpath("_card_assets", name)
+        .read_text(encoding="utf-8")
     )
 
 
 def render_html(inp: CardInputs, fig_dir: Path | None = None) -> str:
     """The dashboard page as a string."""
-    payload = json.dumps(_finite(dashboard_payload(inp, fig_dir)), sort_keys=True,
-                         separators=(",", ":"), allow_nan=False, default=str)
+    payload = json.dumps(
+        _finite(dashboard_payload(inp, fig_dir)),
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+        default=str,
+    )
     # Escape every <, > and & as JSON unicode escapes: "</script" would end
     # the element and "<!--<script" would keep it from ending (WHATWG HTML,
     # script data escaped states). JSON.parse restores the characters.
-    payload = (payload.replace("&", "\\u0026").replace("<", "\\u003c")
-               .replace(">", "\\u003e"))
+    payload = (
+        payload.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+    )
     head_title = f"{_or_unrecorded(inp.spec.get('model'))} model card"
     return (
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{_escape(head_title)}</title>\n<style>\n{_asset('dashboard.css')}"
-        "</style>\n</head>\n<body>\n<div id=\"app\"></div>\n"
-        f"<script type=\"application/json\" id=\"card-data\">{payload}</script>\n"
+        '</style>\n</head>\n<body>\n<div id="app"></div>\n'
+        f'<script type="application/json" id="card-data">{payload}</script>\n'
         f"<script>\n{_asset('dashboard.js')}</script>\n</body>\n</html>\n"
     )
 

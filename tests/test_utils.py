@@ -80,8 +80,9 @@ class TestIsOomError:
         with CPython's generic C-API-failure message rather than a typed
         torch.cuda.OutOfMemoryError -- this can surface on some platforms.
         Must be retried like any other OOM."""
-        exc = SystemError("<built-in method run_backward> returned a result "
-                           "with an error set")
+        exc = SystemError(
+            "<built-in method run_backward> returned a result with an error set"
+        )
         assert is_oom_error(exc) is False  # wrong message: not the OOM pattern
         exc = SystemError("error return without exception set")
         assert is_oom_error(exc) is True
@@ -338,7 +339,9 @@ class TestSetSummaryMemoryConfig:
         mutates person_chunk_size on an instance where the resulting
         network.call() couldn't safely honor it."""
         summary_net = MatrixEquivariantIRTSummary(
-            embed_dim=8, matrix_hidden_dim=8, num_matrix_blocks=1,
+            embed_dim=8,
+            matrix_hidden_dim=8,
+            num_matrix_blocks=1,
             person_pooling="pma",
         )
         assert summary_net.supports_person_chunking is True
@@ -1459,9 +1462,7 @@ class TestProbeMemoryConfig:
         # The reported percentage uses the usable budget as denominator.
         assert result.peak_reserved_pct == pytest.approx(96.0, abs=0.5)
 
-    def test_probe_one_budget_falls_back_to_total_when_query_fails(
-        self, monkeypatch
-    ):
+    def test_probe_one_budget_falls_back_to_total_when_query_fails(self, monkeypatch):
         """If the free-memory query is unavailable, the margin check must fall
         back to physical VRAM rather than failing the trial outright."""
         gib = 2**30
@@ -2492,9 +2493,7 @@ class TestFitWithOomRetry:
         assert result.batch_size == 16
         assert approx.gradient_accumulation_steps == 1
 
-    def test_batch_halving_skips_accumulation_on_non_torch_backend(
-        self, monkeypatch
-    ):
+    def test_batch_halving_skips_accumulation_on_non_torch_backend(self, monkeypatch):
         """EquivariantIRTApproximator.train_step() raises NotImplementedError
         (not an OOM) for gradient_accumulation_steps > 1 outside the torch
         backend -- compensation must not engage there, or a recoverable OOM
@@ -2506,9 +2505,7 @@ class TestFitWithOomRetry:
         is_oom_error's own backend-detection logic (covered separately by
         TestIsOomError)."""
         monkeypatch.setattr(utils_mod, "is_oom_error", lambda exc: True)
-        monkeypatch.setattr(
-            utils_mod.keras.backend, "backend", lambda: "tensorflow"
-        )
+        monkeypatch.setattr(utils_mod.keras.backend, "backend", lambda: "tensorflow")
 
         class FakeApprox:
             gradient_accumulation_steps = 1
@@ -2639,9 +2636,7 @@ class TestFitWithOomRetry:
                 self.seen_start.append(int(self.optimizer.iterations))
                 if self.call_count == 1:
                     # Partial progress inside the failed attempt.
-                    self.optimizer.iterations.assign(
-                        int(self.optimizer.iterations) + 3
-                    )
+                    self.optimizer.iterations.assign(int(self.optimizer.iterations) + 3)
                     if complete_epoch_first:
                         self.history = _FakeHistoryWithLosses([1.0])
                     raise RuntimeError("CUDA out of memory")

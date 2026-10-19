@@ -264,15 +264,21 @@ def bin_coverage(b: Mapping[str, Any]) -> dict[str, Any]:
     cov = b.get("coverage_0.95")
     clustered = "clusters" in b
     small = (b["clusters"] < MIN_BIN_CLUSTERS) if clustered else n < MIN_BIN_N
-    out = {"coverage": None, "interval": None, "small": small,
-           "kind": "cluster-robust" if clustered else "Wilson"}
+    out = {
+        "coverage": None,
+        "interval": None,
+        "small": small,
+        "kind": "cluster-robust" if clustered else "Wilson",
+    }
     if cov is None or cov[0] is None or not n:
         return out
     out["coverage"] = cov[0]
     if clustered:
         if cov[1] is not None:
-            out["interval"] = [max(0.0, cov[0] - 1.96 * cov[1]),
-                               min(1.0, cov[0] + 1.96 * cov[1])]
+            out["interval"] = [
+                max(0.0, cov[0] - 1.96 * cov[1]),
+                min(1.0, cov[0] + 1.96 * cov[1]),
+            ]
     else:
         out["interval"] = list(wilson_interval(round(cov[0] * n), n))
     return out
@@ -419,9 +425,7 @@ def load_card_inputs(
         )
     ranges = (md.get("model_spec") or {}).get("size_ranges") or {}
     grid = record["protocol"]["grid"]
-    cells = {
-        (c["cell"]["n_items"], c["cell"]["n_persons"]): c for c in record["cells"]
-    }
+    cells = {(c["cell"]["n_items"], c["cell"]["n_persons"]): c for c in record["cells"]}
     # plan_cells adds the exact trained bounds to the grid: keep them.
     items_axis = sorted({int(v) for v in grid["n_items"]} | {i for i, _ in cells})
     persons_axis = sorted({int(v) for v in grid["n_persons"]} | {p for _, p in cells})
@@ -443,7 +447,8 @@ def load_card_inputs(
     # One source of truth for "in range": the record's flags must agree with
     # the sidecar's size_ranges, or the card would contradict itself.
     wrong = [
-        f"{i}x{p}" for (i, p), c in sorted(cells.items())
+        f"{i}x{p}"
+        for (i, p), c in sorted(cells.items())
         if bool(c["cell"].get("in_range")) != inp.in_range(i, p)
     ]
     if wrong:
@@ -536,8 +541,11 @@ def _identity(inp: CardInputs) -> str:
     ck = rec.get("checkpoint") or {}
     si = rec.get("session_info") or {}
     rows = [
-        ["Model", f"{_or_unrecorded(spec.get('model'))} "
-                  f"({_or_unrecorded(spec.get('variant'))})"],
+        [
+            "Model",
+            f"{_or_unrecorded(spec.get('model'))} "
+            f"({_or_unrecorded(spec.get('variant'))})",
+        ],
         ["Package version", _or_unrecorded(spec.get("version"))],
         ["Trained", _or_unrecorded(prov.get("timestamp"))],
         ["Git commit (training)", _or_unrecorded(prov.get("git_commit"))],
@@ -565,8 +573,7 @@ def _envelope(inp: CardInputs) -> str:
         validated = f"items {min(vi)}-{max(vi)}, persons {min(vp)}-{max(vp)}"
     else:
         validated = "none"
-    failed = [_cell_name(c) for (_, _), c in sorted(inp.cells.items())
-              if "failed" in c]
+    failed = [_cell_name(c) for (_, _), c in sorted(inp.cells.items()) if "failed" in c]
     if failed:
         validated += f"; failed cells: {', '.join(failed)}"
     ti, tp = inp.trained_items, inp.trained_persons
@@ -581,8 +588,10 @@ def _envelope(inp: CardInputs) -> str:
         ["Trained range", trained],
         ["Validated range (evaluated in-range cells)", validated],
         ["Categories K", _or_unrecorded(spec.get("n_categories"))],
-        ["Missing responses", miss.get("note")
-         or ("supported" if miss["supported"] else "not supported")],
+        [
+            "Missing responses",
+            miss.get("note") or ("supported" if miss["supported"] else "not supported"),
+        ],
         ["Response coding", contract["response_coding"]],
         ["Item orientation", contract["orientation"]],
         ["Score scale", contract["score_scale"]],
@@ -701,15 +710,26 @@ def _grid_table(inp: CardInputs, metric: CardMetric, *, in_range: bool) -> str:
 def _cell_appendix(inp: CardInputs, c: dict[str, Any]) -> list[str]:
     from .card_metrics import CARD_LEVELS
 
-    out = [f"### Cell {_cell_name(c)}" + ("" if c["cell"]["in_range"]
-                                          else " (extrapolation)"), ""]
+    out = [
+        f"### Cell {_cell_name(c)}"
+        + ("" if c["cell"]["in_range"] else " (extrapolation)"),
+        "",
+    ]
     if "failed" in c:
         f = c["failed"]
         return [*out, f"Failed at stage `{f.get('stage')}`: {f.get('message')}", ""]
     params = [*inp.parameters, "theta"]
-    keys = ["bias", "rmse", "corr", "nrmse_excess",
-            *(f"coverage_{lv}" for lv in CARD_LEVELS), "width_0.95",
-            "mean_calibration_error", "calibration_error", "sbc_ecdf_max_dev"]
+    keys = [
+        "bias",
+        "rmse",
+        "corr",
+        "nrmse_excess",
+        *(f"coverage_{lv}" for lv in CARD_LEVELS),
+        "width_0.95",
+        "mean_calibration_error",
+        "calibration_error",
+        "sbc_ecdf_max_dev",
+    ]
     rows = []
     for k in keys:
         rows.append([k, *(_pm(_param_getter(p, k)(c)) for p in params)])
@@ -734,21 +754,30 @@ def _cell_appendix(inp: CardInputs, c: dict[str, Any]) -> list[str]:
                 cov_s = "–"
             if clustered:
                 g = b["clusters"]
-                mark = (f"{n} / {g}" + (f" (datasets < {MIN_BIN_CLUSTERS})"
-                                        if bc["small"] else ""))
+                mark = f"{n} / {g}" + (
+                    f" (datasets < {MIN_BIN_CLUSTERS})" if bc["small"] else ""
+                )
             else:
                 mark = f"{n} (n < {MIN_BIN_N})" if n < MIN_BIN_N else str(n)
-            brow.append([edge, mark, _pm(b.get("bias")), cov_s,
-                         _pm(b.get("width_0.95")), _pm(b.get("posterior_sd")),
-                         _pm(b.get("conditional_se"))])
+            brow.append(
+                [
+                    edge,
+                    mark,
+                    _pm(b.get("bias")),
+                    cov_s,
+                    _pm(b.get("width_0.95")),
+                    _pm(b.get("posterior_sd")),
+                    _pm(b.get("conditional_se")),
+                ]
+            )
         basis = c.get("persons", {}).get("conditional_se_basis")
         intro = (
             "Theta by equal-probability bin of the true theta (prior z-scale; "
             "all scored persons; n / contributing datasets). MCSEs are "
             "cluster-robust by dataset (Cameron & Miller, 2015); coverage "
             "with a 95% interval p ± 1.96 SE."
-            if clustered else
-            "Theta by bin of the true theta (prior z-scale; one random person "
+            if clustered
+            else "Theta by bin of the true theta (prior z-scale; one random person "
             "per dataset). Coverage with a 95% Wilson interval."
         )
         out += [
@@ -756,16 +785,29 @@ def _cell_appendix(inp: CardInputs, c: dict[str, Any]) -> list[str]:
             "SE: 1 / sqrt(test information) at the true theta"
             + (f" ({basis})." if basis else "; not computed for this family."),
             "",
-            _table(["bin", "n / datasets" if clustered else "n", "bias",
-                    "coverage 0.95", "width 0.95",
-                    "posterior SD", "conditional SE"], brow),
+            _table(
+                [
+                    "bin",
+                    "n / datasets" if clustered else "n",
+                    "bias",
+                    "coverage 0.95",
+                    "width 0.95",
+                    "posterior SD",
+                    "conditional SE",
+                ],
+                brow,
+            ),
             "",
         ]
     rel = c.get("persons", {}).get("reliability") or {}
     jt = c.get("joint", {})
     jrows = []
-    for name in ("posterior_variance", "squared_correlation", "difference",
-                 "information"):
+    for name in (
+        "posterior_variance",
+        "squared_correlation",
+        "difference",
+        "information",
+    ):
         if name not in rel:
             continue
         label = f"reliability, {name} ({RELIABILITY_LABEL})"
@@ -783,22 +825,47 @@ def _cell_appendix(inp: CardInputs, c: dict[str, Any]) -> list[str]:
         t = jt.get("tarp", {}).get(ref)
         if t:
             label = f"TARP error, {REF_LABELS[ref]} references"
-            jrows.append([label, _pm(t.get("tarp_error")),
-                          f"null floor {_num(t.get('null_floor'))}"])
+            jrows.append(
+                [
+                    label,
+                    _pm(t.get("tarp_error")),
+                    f"null floor {_num(t.get('null_floor'))}",
+                ]
+            )
     tcc = jt.get("tcc")
     if tcc:
-        jrows.append(["TCC bias (score units)", _pm(tcc.get("tcc_bias")),
-                      f"at theta {tcc.get('thetas')}"])
+        jrows.append(
+            [
+                "TCC bias (score units)",
+                _pm(tcc.get("tcc_bias")),
+                f"at theta {tcc.get('thetas')}",
+            ]
+        )
     rimse = c.get("persons", {}).get("rimse")
     if rimse:
         rr = rimse.get("range_95") or [None, None]
-        jrows.append(["RIMSE, random item", _pm(rimse.get("mean")),
-                      f"{_num(rr[0])} to {_num(rr[1])}"])
-    jrows.append(["Extreme response patterns",
-                  str(c.get("persons", {}).get("extreme_patterns", "–")), ""])
+        jrows.append(
+            [
+                "RIMSE, random item",
+                _pm(rimse.get("mean")),
+                f"{_num(rr[0])} to {_num(rr[1])}",
+            ]
+        )
+    jrows.append(
+        [
+            "Extreme response patterns",
+            str(c.get("persons", {}).get("extreme_patterns", "–")),
+            "",
+        ]
+    )
     s = c.get("sampling", {})
-    jrows.append(["Sampling seconds", _num(s.get("seconds"), 1),
-                  f"{len(s.get('retries') or [])} out-of-memory retries"])
+    jrows.append(
+        [
+            "Sampling seconds",
+            _num(s.get("seconds"), 1),
+            f"{len(s.get('retries') or [])} out-of-memory retries",
+        ]
+    )
     out += [_table(["quantity", "value (MCSE)", "range / note"], jrows), ""]
     return out
 
@@ -830,12 +897,19 @@ def _heatmap(inp: CardInputs, metric: CardMetric, path: Path) -> None:
     cmap = plt.get_cmap("PuOr" if metric.kind == "deviation" else "Blues")
     norm = Normalize(*metric.limits)
     panels = [("inside the trained range", inp.in_items, inp.in_persons, True)]
-    panels.append(("outside the trained range (extrapolation)",
-                   inp.items_axis, inp.persons_axis, False))
+    panels.append(
+        (
+            "outside the trained range (extrapolation)",
+            inp.items_axis,
+            inp.persons_axis,
+            False,
+        )
+    )
     fig, axes = plt.subplots(
-        1, 2, figsize=(12, 4.2),
-        gridspec_kw={"width_ratios": [len(inp.in_persons) or 1,
-                                      len(inp.persons_axis)]},
+        1,
+        2,
+        figsize=(12, 4.2),
+        gridspec_kw={"width_ratios": [len(inp.in_persons) or 1, len(inp.persons_axis)]},
     )
     for ax, (title, items, persons, in_range) in zip(axes, panels):
         ax.set_title(title, fontsize=10)
@@ -849,18 +923,32 @@ def _heatmap(inp: CardInputs, metric: CardMetric, path: Path) -> None:
             ys = [y for y, i in enumerate(items) if i in inp.in_items]
             xs = [x for x, p in enumerate(persons) if p in inp.in_persons]
             if ys and xs:
-                ax.text(np.mean(xs), np.mean(ys) + 0.6, "trained range\n(left panel)",
-                        ha="center", va="center", fontsize=8, color="0.45")
+                ax.text(
+                    np.mean(xs),
+                    np.mean(ys) + 0.6,
+                    "trained range\n(left panel)",
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="0.45",
+                )
             if not inp.record["protocol"].get("include_out_of_range"):
-                ax.text(0.5, 0.12, "not evaluated; run with --include-out-of-range",
-                        ha="center", va="center", transform=ax.transAxes,
-                        fontsize=9)
+                ax.text(
+                    0.5,
+                    0.12,
+                    "not evaluated; run with --include-out-of-range",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                    fontsize=9,
+                )
         for y, i in enumerate(items):
             for x, p in enumerate(persons):
                 if inp.in_range(i, p) != in_range:
                     if not in_range:
-                        ax.add_patch(plt.Rectangle((x - 0.5, y - 0.5), 1, 1,
-                                                   color="0.93", lw=0))
+                        ax.add_patch(
+                            plt.Rectangle((x - 0.5, y - 0.5), 1, 1, color="0.93", lw=0)
+                        )
                     continue
                 c = inp.cells.get((i, p))
                 if c is None:
@@ -871,13 +959,26 @@ def _heatmap(inp: CardInputs, metric: CardMetric, path: Path) -> None:
                 v = metric.getter(c)
                 if v is None or v[0] is None:
                     continue
-                ax.add_patch(plt.Rectangle((x - 0.5, y - 0.5), 1, 1,
-                                           color=cmap(norm(v[0])), lw=0))
+                ax.add_patch(
+                    plt.Rectangle(
+                        (x - 0.5, y - 0.5), 1, 1, color=cmap(norm(v[0])), lw=0
+                    )
+                )
                 shade = float(np.clip(norm(v[0]), 0, 1))
-                dark = (abs(shade - 0.5) > 0.35 if metric.kind == "deviation"
-                        else shade > 0.7)
-                ax.text(x, y, f"{v[0]:.2f}", ha="center", va="center", fontsize=7,
-                        color="white" if dark else "black")
+                dark = (
+                    abs(shade - 0.5) > 0.35
+                    if metric.kind == "deviation"
+                    else shade > 0.7
+                )
+                ax.text(
+                    x,
+                    y,
+                    f"{v[0]:.2f}",
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                    color="white" if dark else "black",
+                )
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
     bar = fig.colorbar(sm, ax=axes, shrink=0.9)
     bar.set_label(
@@ -908,8 +1009,10 @@ def _coverage_curves(inp: CardInputs, path: Path) -> bool:
     for n, (ax, param) in enumerate(zip(np.atleast_1d(axes), params)):
         ax.plot([0.45, 1], [0.45, 1], color="0.5", lw=0.8, ls="--")
         for c, s in zip(cells, sizes):
-            ys = [(_param_getter(param, f"coverage_{lv}")(c) or [None])[0]
-                  for lv in CARD_LEVELS]
+            ys = [
+                (_param_getter(param, f"coverage_{lv}")(c) or [None])[0]
+                for lv in CARD_LEVELS
+            ]
             if any(y is None for y in ys):
                 continue
             ax.plot(CARD_LEVELS, ys, color=cmap((s - lo) / (hi - lo or 1)), lw=1)
@@ -919,8 +1022,7 @@ def _coverage_curves(inp: CardInputs, path: Path) -> bool:
             ax.set_ylabel("observed coverage")
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(lo, hi))
     fig.colorbar(sm, ax=axes, label="log(items x persons)")
-    fig.suptitle("Central-interval coverage, one line per in-range cell",
-                 fontsize=11)
+    fig.suptitle("Central-interval coverage, one line per in-range cell", fontsize=11)
     _save(fig, path)
     plt.close(fig)
     return True
@@ -932,8 +1034,7 @@ def _tarp_curves(inp: CardInputs, path: Path) -> bool:
     Random references alone pass an estimator that returns the prior (Lemos
     et al., 2023, Sec. 4.3), so the two are drawn side by side.
     """
-    cells = [c for c in inp.evaluated(in_range=True)
-             if c.get("joint", {}).get("tarp")]
+    cells = [c for c in inp.evaluated(in_range=True) if c.get("joint", {}).get("tarp")]
     if not cells:
         return False
     import matplotlib
@@ -950,8 +1051,12 @@ def _tarp_curves(inp: CardInputs, path: Path) -> bool:
         for c, s in zip(cells, sizes):
             t = c["joint"]["tarp"].get(ref)
             if t:
-                ax.plot(t["levels"], t["expected_coverage"],
-                        color=cmap((s - lo) / (hi - lo or 1)), lw=1)
+                ax.plot(
+                    t["levels"],
+                    t["expected_coverage"],
+                    color=cmap((s - lo) / (hi - lo or 1)),
+                    lw=1,
+                )
         ax.set_title(f"{REF_LABELS[ref]} references", fontsize=10)
         ax.set_xlabel("credibility level")
     axes[0].set_ylabel("expected coverage")
@@ -972,8 +1077,11 @@ def _prior_densities(inp: CardInputs, path: Path) -> bool:
     from .priors import resolve_prior
     from .simulators import _prior_from_record
 
-    priors = {k: v for k, v in (inp.spec.get("priors") or {}).items()
-              if isinstance(v, dict) and k in ("a", "b", "theta", "delta")}
+    priors = {
+        k: v
+        for k, v in (inp.spec.get("priors") or {}).items()
+        if isinstance(v, dict) and k in ("a", "b", "theta", "delta")
+    }
     if not priors:
         return False
     fig, axes = plt.subplots(1, len(priors), figsize=(3.6 * len(priors), 2.8))
@@ -981,12 +1089,12 @@ def _prior_densities(inp: CardInputs, path: Path) -> bool:
         sampler = resolve_prior(_prior_from_record(rec, role), role)
         x = np.asarray(sampler((PRIOR_DENSITY_DRAWS,), np.random.default_rng(0)))
         lo, hi = np.quantile(x, [0.001, 0.999])
-        ax.hist(x, bins=120, range=(lo, hi), density=True, histtype="step",
-                color="#185FA5")
+        ax.hist(
+            x, bins=120, range=(lo, hi), density=True, histtype="step", color="#185FA5"
+        )
         ax.set_title(f"{role} ~ {rec['name']}", fontsize=10)
         ax.set_yticks([])
-    fig.suptitle(f"Prior densities ({PRIOR_DENSITY_DRAWS:,} seeded draws)",
-                 fontsize=10)
+    fig.suptitle(f"Prior densities ({PRIOR_DENSITY_DRAWS:,} seeded draws)", fontsize=10)
     _save(fig, path)
     plt.close(fig)
     return True
@@ -1044,8 +1152,14 @@ def _trained_map(inp: CardInputs, path: Path) -> bool:
     ax.set_xticks(gp, [str(p) for p in gp])
     ax.set_yticks(gi, [str(i) for i in gi])
     ax.minorticks_off()
-    ax.scatter(np.repeat(gp, len(gi)), np.tile(gi, len(gp)), s=10, color="#D85A30",
-               marker="x", label="card grid")
+    ax.scatter(
+        np.repeat(gp, len(gi)),
+        np.tile(gi, len(gp)),
+        s=10,
+        color="#D85A30",
+        marker="x",
+        label="card grid",
+    )
     ax.set_xlabel("persons")
     ax.set_ylabel("items")
     ax.legend(loc="upper right", fontsize=8)
@@ -1069,16 +1183,27 @@ def _reference_section(inp: CardInputs) -> list[str]:
     from .card_reference import card_value, difference
 
     metrics = {m["key"]: m for m in dashboard_metrics(inp)}
-    md = ["## Reference estimators", "",
-          "Other estimators at the card's cells, value (MCSE). Difference: card "
-          "minus reference, MCSE as for independent estimates. For a paired "
-          "reference the covariance is unknown, so this MCSE is an "
-          "approximation that can be too large or too small.", ""]
+    md = [
+        "## Reference estimators",
+        "",
+        "Other estimators at the card's cells, value (MCSE). Difference: card "
+        "minus reference, MCSE as for independent estimates. For a paired "
+        "reference the covariance is unknown, so this MCSE is an "
+        "approximation that can be too large or too small.",
+        "",
+    ]
     for ref in inp.references:
-        priors = {True: "same as the card's", False: "differ from the card's",
-                  None: "not compared"}[ref.priors_match]
-        md += [f"### {ref.name}", "", f"{ref.estimator} Datasets: {ref.datasets}. "
-               f"Priors: {priors}.", ""]
+        priors = {
+            True: "same as the card's",
+            False: "differ from the card's",
+            None: "not compared",
+        }[ref.priors_match]
+        md += [
+            f"### {ref.name}",
+            "",
+            f"{ref.estimator} Datasets: {ref.datasets}. Priors: {priors}.",
+            "",
+        ]
         md += [f"- `{k}`: {v}" for k, v in sorted(ref.notes.items())]
         if ref.notes:
             md += [""]
@@ -1091,12 +1216,15 @@ def _reference_section(inp: CardInputs) -> list[str]:
             name = f"{i} x {p}" + ("" if inp.in_range(i, p) else " (extrapolation)")
             for key, rv in sorted(vals.items()):
                 cv = None if "failed" in cell else card_value(cell, metrics[key])
-                rows.append([name, f"`{key}`", _pm(cv), _pm(rv),
-                             _pm(difference(cv, rv))])
+                rows.append(
+                    [name, f"`{key}`", _pm(cv), _pm(rv), _pm(difference(cv, rv))]
+                )
         md += [_table(["Cell", "Metric", "Card", ref.name, "Difference"], rows), ""]
         if ref.skipped_cells:
-            md += [f"Cells not on this card, left out: "
-                   f"{', '.join(ref.skipped_cells)}.", ""]
+            md += [
+                f"Cells not on this card, left out: {', '.join(ref.skipped_cells)}.",
+                "",
+            ]
     return md
 
 
@@ -1131,9 +1259,12 @@ def render_markdown(inp: CardInputs, figures: dict[str, str] | None = None) -> s
     if "trained_map" in figures:
         md += [f"![Training sizes]({figures['trained_map']})", ""]
     elif spec.get("size_sampling"):
-        md += ["Map of trained sizes not drawn (needs matplotlib, the [card] "
-               "extra); the sampling rule is in the sidecar's "
-               "`model_spec.size_sampling`.", ""]
+        md += [
+            "Map of trained sizes not drawn (needs matplotlib, the [card] "
+            "extra); the sampling rule is in the sidecar's "
+            "`model_spec.size_sampling`.",
+            "",
+        ]
     else:
         md += ["Training size sampling not recorded; no map of trained cells.", ""]
     md += ["## Priors", "", _priors(inp), ""]
@@ -1143,37 +1274,68 @@ def render_markdown(inp: CardInputs, figures: dict[str, str] | None = None) -> s
     notes = (inp.metadata.get("intended_use") or {}).get("notes")
     md += ["## Key metrics across cells", ""]
     if notes:
-        md += [f"> **Author's note** (written by the model's author, not "
-               f"generated): {notes}", ""]
+        md += [
+            f"> **Author's note** (written by the model's author, not "
+            f"generated): {notes}",
+            "",
+        ]
     if inp.joint_omitted:
         md += [f"Joint metrics (TARP, TCC) not computed: {inp.joint_omitted}.", ""]
     for metric in inp.metrics:
-        md += [f"### {metric.label}", "", metric.guide + f" Colour limits: "
-               f"[{metric.limits[0]}, {metric.limits[1]}].", ""]
+        md += [
+            f"### {metric.label}",
+            "",
+            metric.guide + f" Colour limits: [{metric.limits[0]}, {metric.limits[1]}].",
+            "",
+        ]
         key = f"heatmap_{metric.key}"
         if key in figures:
             md += [f"![{metric.label}]({figures[key]})", ""]
-        md += ["Inside the trained range, value (MCSE):", "",
-               _grid_table(inp, metric, in_range=True), ""]
+        md += [
+            "Inside the trained range, value (MCSE):",
+            "",
+            _grid_table(inp, metric, in_range=True),
+            "",
+        ]
         if inp.evaluated(in_range=False):
-            md += ["Outside the trained range (extrapolation):", "",
-                   _grid_table(inp, metric, in_range=False), ""]
+            md += [
+                "Outside the trained range (extrapolation):",
+                "",
+                _grid_table(inp, metric, in_range=False),
+                "",
+            ]
     if "coverage" in figures:
         md += [f"![Coverage curves]({figures['coverage']})", ""]
     if "tarp" in figures:
         md += [f"![TARP coverage, both reference rules]({figures['tarp']})", ""]
     if not inp.record["protocol"].get("include_out_of_range"):
-        md += ["Cells outside the trained range: not evaluated; run with "
-               "`--include-out-of-range`.", ""]
+        md += [
+            "Cells outside the trained range: not evaluated; run with "
+            "`--include-out-of-range`.",
+            "",
+        ]
 
     md += _reference_section(inp)
-    md += ["## Limitations", "", *(f"- {s}" for s in _limitations(inp)), "",
-           "## Usage", "", _usage(inp), ""]
+    md += [
+        "## Limitations",
+        "",
+        *(f"- {s}" for s in _limitations(inp)),
+        "",
+        "## Usage",
+        "",
+        _usage(inp),
+        "",
+    ]
 
     md += ["## Appendix: per-cell results", ""]
-    for c in sorted(inp.record["cells"],
-                    key=lambda c: (not c["cell"]["in_range"], c["cell"]["n_items"],
-                                   c["cell"]["n_persons"])):
+    for c in sorted(
+        inp.record["cells"],
+        key=lambda c: (
+            not c["cell"]["in_range"],
+            c["cell"]["n_items"],
+            c["cell"]["n_persons"],
+        ),
+    ):
         md += _cell_appendix(inp, c)
 
     rec = inp.record
@@ -1195,9 +1357,7 @@ def render_markdown(inp: CardInputs, figures: dict[str, str] | None = None) -> s
     return "\n".join(md)
 
 
-def render_model_card(
-    card_dir: str | Path, metadata: str | Path | None = None
-) -> Path:
+def render_model_card(card_dir: str | Path, metadata: str | Path | None = None) -> Path:
     """Write ``model_card.md``, ``model_card.html`` and ``figures/*.png``.
 
     Parameters

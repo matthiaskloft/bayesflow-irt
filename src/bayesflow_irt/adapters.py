@@ -206,11 +206,7 @@ class OneHotEncode(ElementwiseTransform):
             raise ValueError(
                 "OneHotEncode.forward requires finite integer category indices "
                 f"in [0, {self.n_categories}); got finite range {observed}"
-                + (
-                    ""
-                    if np.all(np.isfinite(values))
-                    else " plus non-finite values"
-                )
+                + ("" if np.all(np.isfinite(values)) else " plus non-finite values")
                 + "."
             )
         idx = values.astype(int)

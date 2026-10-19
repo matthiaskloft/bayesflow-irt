@@ -138,8 +138,7 @@ def _reject_unsafe_storage(file: Any) -> None:
     def check_dataset(name: str, obj: Any) -> None:
         if isinstance(obj, h5py.Dataset) and (obj.external or obj.is_virtual):
             problems.append(
-                f"Not allowed: H5 dataset {name!r} with external or virtual "
-                "storage"
+                f"Not allowed: H5 dataset {name!r} with external or virtual storage"
             )
 
     file.visititems_links(check_link)

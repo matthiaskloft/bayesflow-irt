@@ -86,8 +86,7 @@ class TestRenameComponent:
     def test_preserves_the_uniquifying_suffix(self):
         """Keras appends `_1`, `_2` for repeats within one container."""
         assert (
-            _rename_component("set_attention_block_2", _OLD_TO_NEW)
-            == "set_attention_2"
+            _rename_component("set_attention_block_2", _OLD_TO_NEW) == "set_attention_2"
         )
 
     def test_leaves_unrelated_names_alone(self):
@@ -207,9 +206,7 @@ class TestExternalStorageRejected:
             _rewrite(path, destination, _OLD_TO_NEW)
         assert not destination.exists()
 
-    def test_load_weights_compat_does_not_materialize_external_bytes(
-        self, tmp_path
-    ):
+    def test_load_weights_compat_does_not_materialize_external_bytes(self, tmp_path):
         path = self._hostile(tmp_path)
         target = _model()
         before = weights_digest(target)

@@ -90,9 +90,14 @@ def test_pcm_threshold_path():
 
     path = SIDECARS / "pcm_equivariant_metadata.json"
     md = MetadataTracker.load(path).to_dict()
-    s = sample_cell(FakeApproximator(sd=0.05), md["model_spec"], Cell(6, 30, True),
-                    _protocol(datasets_per_cell=60), chunk_size=25,
-                    trained_at=md["provenance"]["timestamp"])
+    s = sample_cell(
+        FakeApproximator(sd=0.05),
+        md["model_spec"],
+        Cell(6, 30, True),
+        _protocol(datasets_per_cell=60),
+        chunk_size=25,
+        trained_at=md["provenance"]["timestamp"],
+    )
     n_thresholds = s.data["delta"].shape[-1]
     assert s.draws["delta"].shape == (60, 40, 6, n_thresholds)
     assert s.threshold.shape == (60,) and s.threshold.max() < n_thresholds
@@ -103,10 +108,10 @@ def test_pcm_threshold_path():
 def test_split_halves_are_seeded_from_their_own_start():
     """A half reproduces what an unsplit run with that chunk boundary gives."""
     cell = Cell(5, 10, True)
-    split = sample_cell(FakeApproximator(max_chunk=3), SPEC_2PL, cell,
-                        _protocol(), chunk_size=6)
-    small = sample_cell(FakeApproximator(), SPEC_2PL, cell, _protocol(),
-                        chunk_size=3)
+    split = sample_cell(
+        FakeApproximator(max_chunk=3), SPEC_2PL, cell, _protocol(), chunk_size=6
+    )
+    small = sample_cell(FakeApproximator(), SPEC_2PL, cell, _protocol(), chunk_size=3)
     assert np.array_equal(split.draws["b"], small.draws["b"])
 
 
@@ -133,10 +138,13 @@ def test_out_of_memory_chunk_shrinks_and_stays_small():
 
 def test_shrink_is_to_three_quarters():
     fake = FakeApproximator(max_chunk=5)
-    s = sample_cell(fake, SPEC_2PL, Cell(5, 10, True), _protocol(datasets_per_cell=8),
-                    chunk_size=8)
-    assert s.retries == [{"start": 0, "size": 8, "retry_size": 6},
-                         {"start": 0, "size": 6, "retry_size": 4}]
+    s = sample_cell(
+        fake, SPEC_2PL, Cell(5, 10, True), _protocol(datasets_per_cell=8), chunk_size=8
+    )
+    assert s.retries == [
+        {"start": 0, "size": 8, "retry_size": 6},
+        {"start": 0, "size": 6, "retry_size": 4},
+    ]
     assert fake.calls == [8, 6, 4, 4]
 
 
@@ -151,12 +159,18 @@ def test_out_of_memory_at_one_dataset_fails_the_cell():
 
 
 def test_auto_chunk_size_is_recorded():
-    s = sample_cell(FakeApproximator(), SPEC_2PL, Cell(5, 10, True), _protocol(),
-                    chunk_size="auto")
+    s = sample_cell(
+        FakeApproximator(), SPEC_2PL, Cell(5, 10, True), _protocol(), chunk_size="auto"
+    )
     assert s.chunk_rule["rule"] == "auto"
     assert 1 <= s.chunk_size <= 12 and s.chunk_rule["chunk_size"] == s.chunk_size
-    fixed = sample_cell(FakeApproximator(), SPEC_2PL, Cell(5, 10, True),
-                        _protocol(), chunk_size=s.chunk_size)
+    fixed = sample_cell(
+        FakeApproximator(),
+        SPEC_2PL,
+        Cell(5, 10, True),
+        _protocol(),
+        chunk_size=s.chunk_size,
+    )
     assert np.array_equal(s.draws["b"], fixed.draws["b"])  # probe leaves no trace
 
 
@@ -203,15 +217,26 @@ def test_autoregressive_row_batch_shrinks_at_one_dataset():
 
 def test_autoregressive_one_row_out_of_memory_fails_the_cell():
     with pytest.raises(CellFailedError):
-        sample_cell(FakeAutoregressive(max_rows=0), SPEC_2PL, Cell(5, 10, True),
-                    _protocol(), chunk_size=1)
+        sample_cell(
+            FakeAutoregressive(max_rows=0),
+            SPEC_2PL,
+            Cell(5, 10, True),
+            _protocol(),
+            chunk_size=1,
+        )
 
 
 @pytest.mark.parametrize("share", [0, -0.5, 1.5])
 def test_sample_cell_rejects_memory_share(share):
     with pytest.raises(ValueError, match="memory_share"):
-        sample_cell(FakeApproximator(), SPEC_2PL, Cell(5, 10, True), _protocol(),
-                    chunk_size="auto", memory_share=share)
+        sample_cell(
+            FakeApproximator(),
+            SPEC_2PL,
+            Cell(5, 10, True),
+            _protocol(),
+            chunk_size="auto",
+            memory_share=share,
+        )
 
 
 def test_one_dataset_chunk_out_of_memory_fails_the_cell():
@@ -246,8 +271,9 @@ def test_retry_runs_after_the_failed_attempt_is_released():
             return super().sample(conditions, num_samples)
 
     fake = Tracking()
-    sample_cell(fake, SPEC_2PL, Cell(5, 10, True), _protocol(datasets_per_cell=6),
-                chunk_size=6)
+    sample_cell(
+        fake, SPEC_2PL, Cell(5, 10, True), _protocol(datasets_per_cell=6), chunk_size=6
+    )
     assert fake.alive_at_retry == [False, False]
 
 
@@ -271,8 +297,9 @@ def test_reset_posterior_seed_resets_generators():
 
 def test_unsupported_family():
     with pytest.raises(ValueError, match="Unsupported model family"):
-        sample_cell(FakeApproximator(), {"model": "3PL"}, Cell(5, 10, True),
-                    _protocol())
+        sample_cell(
+            FakeApproximator(), {"model": "3PL"}, Cell(5, 10, True), _protocol()
+        )
 
 
 @pytest.mark.slow

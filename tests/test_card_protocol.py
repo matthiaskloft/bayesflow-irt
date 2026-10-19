@@ -21,7 +21,9 @@ def test_presets():
     val = EvaluationProtocol.preset()
     dev = EvaluationProtocol.preset("development")
     assert (val.preset_name, val.datasets_per_cell, val.include_out_of_range) == (
-        "validation", 1000, True,
+        "validation",
+        1000,
+        True,
     )
     assert (dev.datasets_per_cell, dev.posterior_draws) == (100, 500)
     assert not dev.include_out_of_range
@@ -91,8 +93,9 @@ def test_bounds_off_the_grid_are_cells():
 
 def test_inverted_range_raises():
     with pytest.raises(ValueError, match="lower bound"):
-        plan_cells({"n_items": (10, 5), "n_persons": (5, 10)},
-                   EvaluationProtocol.preset())
+        plan_cells(
+            {"n_items": (10, 5), "n_persons": (5, 10)}, EvaluationProtocol.preset()
+        )
 
 
 def test_cell_seed_is_keyed_by_sizes_not_position():
@@ -119,8 +122,9 @@ def test_override_types_are_checked():
 
 
 def test_seed_rule_is_stored():
-    assert "SeedSequence([seed, n_items, n_persons])" in (
-        EvaluationProtocol.preset().to_dict()["seed_rule"]
+    assert (
+        "SeedSequence([seed, n_items, n_persons])"
+        in (EvaluationProtocol.preset().to_dict()["seed_rule"])
     )
 
 

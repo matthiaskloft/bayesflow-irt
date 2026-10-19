@@ -397,9 +397,7 @@ class TestAdaptiveGrid:
         )
         result = scorer.score(x, n_plausible_values=100)
         k = result.plausible_values.shape[1]
-        pit = ((result.plausible_values < theta[:, None]).sum(axis=1) + 0.5) / (
-            k + 1
-        )
+        pit = ((result.plausible_values < theta[:, None]).sum(axis=1) + 0.5) / (k + 1)
         alphas = np.linspace(0.005, 0.995, 20)
         coverage = np.array([np.mean(np.abs(pit - 0.5) <= al / 2) for al in alphas])
         assert np.median(np.abs(coverage - alphas)) < 0.025
@@ -483,8 +481,14 @@ class TestAdaptiveGrid:
         # budget // (S * Q * I) = 1 -> one person per block (17 blocks)
         monkeypatch.setattr(scoring, "_PERSON_GRID_BLOCK_ELEMENTS", 1)
         blocked = scorer.score(x, n_plausible_values=10)
-        for name in ("mean", "sd", "median", "eti_lower", "hdi_upper",
-                     "plausible_values"):
+        for name in (
+            "mean",
+            "sd",
+            "median",
+            "eti_lower",
+            "hdi_upper",
+            "plausible_values",
+        ):
             assert_allclose(getattr(blocked, name), getattr(ref, name), atol=1e-12)
 
     @pytest.mark.parametrize("model", ["PCM", "GPCM"])
@@ -719,9 +723,7 @@ class TestReturnPosteriorDraws:
 
     def test_iid_draws_match_per_draw_masses(self):
         scorer, x = self._scorer(n_draws=4000, n_persons=4, identical=True)
-        res = scorer.score(
-            x, return_posterior=self._BOTH, draw_moments=True, seed=11
-        )
+        res = scorer.score(x, return_posterior=self._BOTH, draw_moments=True, seed=11)
         # Identical item draws: the marginal masses are every draw's masses.
         assert_allclose(res.theta_draw_mean, np.tile(res.mean, (4000, 1)), atol=1e-10)
         assert_allclose(res.theta_draw_sd, np.tile(res.sd, (4000, 1)), atol=1e-10)
@@ -755,9 +757,7 @@ class TestReturnPosteriorDraws:
         import bayesflow_irt.scoring as scoring
 
         scorer, x = self._scorer(n_draws=10)
-        ref = scorer.score(
-            x, return_posterior="draws", draw_moments=True, seed=2
-        )
+        ref = scorer.score(x, return_posterior="draws", draw_moments=True, seed=2)
         monkeypatch.setattr(scoring, "_BINARY_POSTERIOR_CHUNK_SIZE", 3)
         for n_cores in (1, 2):
             out = scorer.score(
@@ -795,9 +795,7 @@ class TestReturnPosteriorDraws:
     def test_refined_persons_use_matching_prior_weights(self):
         """Long test: refinement replaces the pass-2 grid and prior weights."""
         scorer, x = self._scorer(n_draws=3000, n_items=200, n_persons=5, identical=True)
-        res = scorer.score(
-            x, return_posterior=self._BOTH, draw_moments=True, seed=8
-        )
+        res = scorer.score(x, return_posterior=self._BOTH, draw_moments=True, seed=8)
         h = res.theta_grid[:, 1] - res.theta_grid[:, 0]
         assert np.all(h <= 0.5 * res.sd + 1e-12)  # refinement resolved the SD
         # Stale (pass-2) prior weights would make these differ from res.mean.
@@ -848,9 +846,7 @@ class TestReturnPosteriorDraws:
 
     def test_fixed_grid(self):
         scorer, x = self._scorer()
-        res = scorer.score(
-            x, return_posterior=self._BOTH, adaptive_grid=False, seed=1
-        )
+        res = scorer.score(x, return_posterior=self._BOTH, adaptive_grid=False, seed=1)
         assert res.theta_draws.shape == (8, 10)
         assert not res.theta_window_uncontained.any()
         self._assert_in_cells(res)
@@ -948,8 +944,17 @@ class TestTorchDevicePath:
 
     @staticmethod
     def _assert_same(r, ref):
-        for name in ("mean", "map", "median", "sd", "eti_lower", "eti_upper",
-                     "hdi_lower", "hdi_upper", "plausible_values"):
+        for name in (
+            "mean",
+            "map",
+            "median",
+            "sd",
+            "eti_lower",
+            "eti_upper",
+            "hdi_lower",
+            "hdi_upper",
+            "plausible_values",
+        ):
             if getattr(ref, name) is None:
                 continue
             assert_allclose(getattr(r, name), getattr(ref, name), atol=1e-8, rtol=0)
@@ -1061,8 +1066,13 @@ class TestTorchDevicePath:
         scorer, x = self._scorer(model)
         ref = scorer.score(x, return_posterior="draws", seed=3)
         for device in self._devices():
-            r = scorer.score(x, device=device, torch_dtype="float32",
-                             return_posterior="draws", seed=3)
+            r = scorer.score(
+                x,
+                device=device,
+                torch_dtype="float32",
+                return_posterior="draws",
+                seed=3,
+            )
             assert r.mean.dtype == np.float64
             np.testing.assert_allclose(r.mean, ref.mean, atol=1e-4)
             np.testing.assert_allclose(r.sd, ref.sd, rtol=1e-4)

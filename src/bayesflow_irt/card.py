@@ -386,9 +386,7 @@ def _auto_chunk_size(
         peaks.append(max(torch.cuda.max_memory_allocated() - base, 1))
     per_dataset = peaks[0] / sizes[0]
     if len(sizes) > 1:
-        per_dataset = max(
-            per_dataset, (peaks[1] - peaks[0]) / (sizes[1] - sizes[0])
-        )
+        per_dataset = max(per_dataset, (peaks[1] - peaks[0]) / (sizes[1] - sizes[0]))
     safe_empty_cache()
     free = torch.cuda.mem_get_info()[0] + (
         torch.cuda.memory_reserved() - torch.cuda.memory_allocated()
@@ -677,10 +675,7 @@ def _joint_item_draws(sample: CellSample) -> tuple[tuple[str, ...], Any, Any]:
     """Draws ``(n, S, P*I)`` and truth ``(n, P*I)``, ``a`` as ``log a``."""
     keys = tuple(sample.draws)
     draws = np.concatenate(
-        [
-            np.log(sample.draws[k]) if k == "a" else sample.draws[k]
-            for k in keys
-        ],
+        [np.log(sample.draws[k]) if k == "a" else sample.draws[k] for k in keys],
         axis=-1,
     )
     truth = np.concatenate(
@@ -840,7 +835,7 @@ def joint_metrics(
             return None, x
         ia, ib = keys.index("a"), keys.index("b")
         block = slice(ia * n_items, (ia + 1) * n_items)
-        return x[..., block], x[..., ib * n_items:(ib + 1) * n_items]
+        return x[..., block], x[..., ib * n_items : (ib + 1) * n_items]
 
     true_tcc = _tcc(*split(truth), theta)
     for start in range(0, n, chunk_size):
@@ -938,6 +933,7 @@ def _cluster_mean(
     n_g = np.bincount(inv, minlength=g)
     var = g / (g - 1) * np.sum((s - n_g * mean) ** 2) / values.size**2
     return mean, float(np.sqrt(var)), g
+
 
 #: Rectangular quadrature of RIMSE: Q = 101 nodes on [-5, 5] (Falk and
 #: Feuerstahler, 2021), in prior SDs around the prior mean.
@@ -1233,16 +1229,21 @@ def network_config(approximator: Any) -> dict[str, Any] | None:
     import keras
 
     try:
-        config = json.loads(json.dumps(
-            keras.saving.serialize_keras_object(approximator), default=str))
+        config = json.loads(
+            json.dumps(keras.saving.serialize_keras_object(approximator), default=str)
+        )
     except TypeError:  # not a Keras object (a caller-supplied stand-in)
         return None
     try:
         n_parameters = int(approximator.count_params())
     except ValueError:  # an unbuilt model has no weights to count
         n_parameters = None
-    return {"config": config, "n_parameters": n_parameters,
-            "source": "serialize_keras_object of the loaded checkpoint"}
+    return {
+        "config": config,
+        "n_parameters": n_parameters,
+        "source": "serialize_keras_object of the loaded checkpoint",
+    }
+
 
 #: ``PersonScorer.score``'s warning for all-correct/all-incorrect patterns.
 #: 1PL/2PL say "all-correct ...", PCM/GPCM "all-highest-category ...".
@@ -1353,9 +1354,7 @@ def _cell_metrics(
     entry["joint"] = joint_metrics(sample)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        persons = person_metrics(
-            sample, protocol, theta_prior=_theta_prior(model_spec)
-        )
+        persons = person_metrics(sample, protocol, theta_prior=_theta_prior(model_spec))
     extreme = 0
     for w in caught:
         match = _EXTREME_PATTERNS.search(str(w.message))

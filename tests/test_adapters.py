@@ -845,8 +845,10 @@ class TestSizeConditionStandardization:
         adapter = make_2pl_adapter(sim)
 
         cols = np.concatenate(
-            [np.asarray(adapter(sim.sample((16,)))["inference_conditions"])
-             for _ in range(12)]
+            [
+                np.asarray(adapter(sim.sample((16,)))["inference_conditions"])
+                for _ in range(12)
+            ]
         )
 
         # Raw draws span 5-500; standardized ones must not.
@@ -931,8 +933,10 @@ class TestSizeConditionStandardization:
         assert (mean, std) != _log_size_moments((10, 500), None)
         rng = np.random.default_rng(3)
         logs = np.log(
-            [_draw_bucketed_size(rng, (10, 500), None, "log_uniform")
-             for _ in range(20000)]
+            [
+                _draw_bucketed_size(rng, (10, 500), None, "log_uniform")
+                for _ in range(20000)
+            ]
         )
         assert logs.mean() == pytest.approx(mean, abs=0.02)
         assert logs.std() == pytest.approx(std, abs=0.02)

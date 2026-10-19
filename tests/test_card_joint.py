@@ -12,8 +12,9 @@ from bayesflow_irt.sbc import classical_reference_points, compute_tarp_coverage
 PRIOR_SD = {"a": 0.5, "b": 1.0}  # log a ~ N(0, 0.5), b ~ N(0, 1)
 
 
-def _sample(n=300, n_items=6, n_persons=200, draws=80, noise=0.3, seed=0,
-            ignore_data=False):
+def _sample(
+    n=300, n_items=6, n_persons=200, draws=80, noise=0.3, seed=0, ignore_data=False
+):
     """2PL cell whose draws are an exact posterior, or the prior.
 
     Each parameter is observed once with Gaussian noise, ``c = truth +
@@ -33,7 +34,8 @@ def _sample(n=300, n_items=6, n_persons=200, draws=80, noise=0.3, seed=0,
         else:
             mean = var * c / noise**2
             post[key] = mean[:, None] + np.sqrt(var) * rng.normal(
-                size=(n, draws, n_items))
+                size=(n, draws, n_items)
+            )
         truth[key] = (t, c)
     theta = rng.normal(size=(n, n_persons, 1))
     a_c, b_c = np.exp(truth["a"][1]), truth["b"][1]
@@ -43,8 +45,10 @@ def _sample(n=300, n_items=6, n_persons=200, draws=80, noise=0.3, seed=0,
         cell=Cell(n_items, n_persons, True),
         seed=11,
         data={"a": np.exp(truth["a"][0]), "b": truth["b"][0], "responses": resp},
-        draws={"a": np.exp(post["a"]).astype(np.float32),
-               "b": post["b"].astype(np.float32)},
+        draws={
+            "a": np.exp(post["a"]).astype(np.float32),
+            "b": post["b"].astype(np.float32),
+        },
         item=np.zeros(n, int),
         person=np.zeros(n, int),
         threshold=None,
@@ -57,18 +61,16 @@ def _sample(n=300, n_items=6, n_persons=200, draws=80, noise=0.3, seed=0,
 def test_matches_the_library_functions():
     s = _sample()
     out = joint_metrics(s, chunk_size=7)
-    log_draws = np.concatenate(
-        [np.log(s.draws["a"]), s.draws["b"]], axis=-1
-    ).astype(float)
+    log_draws = np.concatenate([np.log(s.draws["a"]), s.draws["b"]], axis=-1).astype(
+        float
+    )
     truth = np.concatenate([np.log(s.data["a"]), s.data["b"]], axis=-1)
-    inputs = SimpleNamespace(param_keys=("a", "b"), draws=log_draws,
-                             true_values=truth)
+    inputs = SimpleNamespace(param_keys=("a", "b"), draws=log_draws, true_values=truth)
     for scale, key in (("z", "tcc_z_bias"), ("tcc", "tcc_bias")):
         ref = make_tcc_bias_metric(scale=scale)(inputs)[key]
         assert out["tcc"][key][0] == pytest.approx(ref, rel=1e-6)
     refs = classical_reference_points(s.data["responses"], ("a", "b"))
-    ref = compute_tarp_coverage(log_draws, truth, reference_points=refs,
-                                resolution=39)
+    ref = compute_tarp_coverage(log_draws, truth, reference_points=refs, resolution=39)
     assert out["tarp"]["classical"]["tarp_error"][0] == ref["tarp_error"]
     assert len(out["tarp"]["random"]["levels"]) == 39
 
@@ -112,8 +114,9 @@ def _too_narrow(sample, factor=0.7):
 
 def test_bootstrap_mcse_matches_spread_away_from_the_null():
     """Near the floor the bootstrap overstates (documented); here it must not."""
-    reps = [joint_metrics(_too_narrow(_sample(n=150, draws=40, seed=s)))
-            for s in range(30)]
+    reps = [
+        joint_metrics(_too_narrow(_sample(n=150, draws=40, seed=s))) for s in range(30)
+    ]
     for ref in ("random", "classical"):
         values = np.array([r["tarp"][ref]["tarp_error"] for r in reps])
         assert values[:, 0].mean() > 2 * reps[0]["tarp"][ref]["null_floor"]
@@ -141,8 +144,9 @@ def test_1pl_tcc_matches_library():
     s.draws.pop("a")
     s.data.pop("a")
     out = joint_metrics(s)
-    inputs = SimpleNamespace(param_keys=("b",), draws=s.draws["b"].astype(float),
-                             true_values=s.data["b"])
+    inputs = SimpleNamespace(
+        param_keys=("b",), draws=s.draws["b"].astype(float), true_values=s.data["b"]
+    )
     ref = make_tcc_bias_metric(model="1pl", scale="tcc")(inputs)["tcc_bias"]
     assert out["tcc"]["tcc_bias"][0] == pytest.approx(ref, rel=1e-6)
 

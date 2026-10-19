@@ -15,8 +15,9 @@ from bayesflow_irt import render_model_card
 
 
 def _payload(html: str) -> dict:
-    m = re.search(r'<script type="application/json" id="card-data">(.*?)</script>',
-                  html, re.S)
+    m = re.search(
+        r'<script type="application/json" id="card-data">(.*?)</script>', html, re.S
+    )
     return json.loads(m.group(1))
 
 
@@ -41,8 +42,9 @@ def test_extrapolated_cells_reach_the_payload(card_dir, tmp_path):  # noqa: F811
         rec["cells"].append(far)
         rec["protocol"]["include_out_of_range"] = True
 
-    data = _payload(ch.render_html(cr.load_card_inputs(_copy(card_dir, tmp_path,
-                                                                 edit))))
+    data = _payload(
+        ch.render_html(cr.load_card_inputs(_copy(card_dir, tmp_path, edit)))
+    )
     out = [c for c in data["cells"] if not c["cell"]["in_range"]]
     assert [(c["cell"]["n_items"], c["cell"]["n_persons"]) for c in out] == [(3, 10)]
     assert 3 in data["axes"]["items"] and 3 not in data["axes"]["in_items"]
@@ -55,8 +57,9 @@ def test_banners_and_omitted_joint_reach_the_payload(card_dir, tmp_path):  # noq
         for c in rec["cells"]:
             c["joint"] = {"omitted": "not for this family"}
 
-    data = _payload(ch.render_html(cr.load_card_inputs(_copy(card_dir, tmp_path,
-                                                                 edit))))
+    data = _payload(
+        ch.render_html(cr.load_card_inputs(_copy(card_dir, tmp_path, edit)))
+    )
     assert data["banners"][0].startswith("Development run, not a validation")
     assert data["joint_omitted"] == "not for this family"
     assert not [m for m in data["metrics"] if m["tab"] == "joint"]
@@ -115,10 +118,16 @@ def test_limits_do_not_depend_on_the_values(card_dir, tmp_path):  # noqa: F811
             c["items"]["b"]["width_0.95"] = [99.0, 0.1]
             c["persons"]["extreme_patterns"] = 10**6
 
-    a = {m["key"]: m["limits"] for m in ch.dashboard_metrics(
-        cr.load_card_inputs(card_dir))}
-    b = {m["key"]: m["limits"] for m in ch.dashboard_metrics(
-        cr.load_card_inputs(_copy(card_dir, tmp_path, edit)))}
+    a = {
+        m["key"]: m["limits"]
+        for m in ch.dashboard_metrics(cr.load_card_inputs(card_dir))
+    }
+    b = {
+        m["key"]: m["limits"]
+        for m in ch.dashboard_metrics(
+            cr.load_card_inputs(_copy(card_dir, tmp_path, edit))
+        )
+    }
     assert a == b
     inp = cr.load_card_inputs(card_dir)
     # b ~ normal(0, 2) in the fixture: 95% width 2 * 1.96 * 2.
@@ -133,18 +142,22 @@ def test_level_guides_and_tcc_thetas(card_dir):  # noqa: F811
     assert "central 50% interval" in ms["b.coverage_dev_0.5"]["guide"]
     thetas = inp.evaluated()[0]["joint"]["tcc"]["thetas"]
     assert [k for k in ms if k.startswith("joint.tcc_bias_")] == [
-        f"joint.tcc_bias_{t:g}" for t in thetas]
+        f"joint.tcc_bias_{t:g}" for t in thetas
+    ]
 
 
 def test_incomplete_record_counts_failures_from_cells(card_dir, tmp_path):  # noqa: F811
     def edit(rec):
         rec["complete"] = False
         rec.pop("failed_cells", None)
-        rec["cells"][0] = {"cell": rec["cells"][0]["cell"],
-                           "failed": {"stage": "sampling", "message": "OOM"}}
+        rec["cells"][0] = {
+            "cell": rec["cells"][0]["cell"],
+            "failed": {"stage": "sampling", "message": "OOM"},
+        }
 
-    data = _payload(ch.render_html(cr.load_card_inputs(_copy(card_dir, tmp_path,
-                                                                 edit))))
+    data = _payload(
+        ch.render_html(cr.load_card_inputs(_copy(card_dir, tmp_path, edit)))
+    )
     assert data["strip"]["failed"] == 1
 
 
@@ -186,8 +199,12 @@ def test_javascript_values_match_the_record(card_dir, tmp_path):  # noqa: F811
         "console.log(JSON.stringify(out));\n",
         encoding="utf-8",
     )
-    res = subprocess.run(["node", str(driver), str(js), str(tmp_path / "payload.json")],
-                         capture_output=True, text=True, check=True)
+    res = subprocess.run(
+        ["node", str(driver), str(js), str(tmp_path / "payload.json")],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     got = json.loads(res.stdout)
     c = inp.evaluated()[0]
     name = f"{c['cell']['n_items']}x{c['cell']['n_persons']}"
@@ -196,8 +213,11 @@ def test_javascript_values_match_the_record(card_dir, tmp_path):  # noqa: F811
     assert got[f"{name}|b.coverage_dev_0.95"]["se"] == pytest.approx(cov[1])
     d, dse = c["joint"]["tcc"]["d_mean"], c["joint"]["tcc"]["d_mean_se"]
     t1 = f"joint.tcc_bias_{c['joint']['tcc']['thetas'][1]:g}"
-    assert got[f"{name}|{t1}"] == {**got[f"{name}|{t1}"], "v": pytest.approx(d[1]),
-                                   "se": pytest.approx(dse[1])}
+    assert got[f"{name}|{t1}"] == {
+        **got[f"{name}|{t1}"],
+        "v": pytest.approx(d[1]),
+        "se": pytest.approx(dse[1]),
+    }
     assert got[f"{name}|theta.extreme_share"]["se"] is None
 
 
@@ -228,8 +248,7 @@ def test_bins_carry_wilson_intervals_and_small_n(card_dir):  # noqa: F811
 
 
 def test_format2_bins_use_the_clustered_se():
-    b = {"edges": [0.0, 0.5], "n": 400, "clusters": 25,
-         "coverage_0.95": [0.9, 0.02]}
+    b = {"edges": [0.0, 0.5], "n": 400, "clusters": 25, "coverage_0.95": [0.9, 0.02]}
     bc = cr.bin_coverage(b)
     assert bc["kind"] == "cluster-robust"
     assert bc["interval"] == pytest.approx([0.9 - 0.0392, 0.9 + 0.0392])
@@ -270,8 +289,13 @@ def test_band_coverage_recursion_is_exact():
         for b in range(n + 1 - a):
             c = n - a - b
             if lo[0] <= a <= hi[0] and lo[1] <= a + b <= hi[1]:
-                exact += (factorial(n) / (factorial(a) * factorial(b) * factorial(c))
-                          * widths[0] ** a * widths[1] ** b * widths[2] ** c)
+                exact += (
+                    factorial(n)
+                    / (factorial(a) * factorial(b) * factorial(c))
+                    * widths[0] ** a
+                    * widths[1] ** b
+                    * widths[2] ** c
+                )
     assert np.isclose(ch._band_coverage(n, z, gamma), exact)
 
 
@@ -297,27 +321,58 @@ def test_prior_density_curves_integrate_to_about_one(card_dir):  # noqa: F811
 
 
 def test_network_groups_flatten_a_serialized_config():
-    record = {"network": {"n_parameters": 1234, "source": "test", "config": {
-        "class_name": "Approx", "config": {
-            "name": "approx", "flow_chunk_size": None, "item_posterior": "flow",
-            "summary_network": {"class_name": "Summary", "config": {
-                "name": "s", "dtype": {"class_name": "DTypePolicy"},
-                "embed_dim": 32, "raw_feature_channels": ["a", "b"]}},
-            "inference_network": {"class_name": "CouplingFlow", "config": {
-                "depth": 6, "base_distribution": {
-                    "class_name": "DiagonalNormal", "config": {
-                        "mean": {"class_name": "__tensor__"},
-                        "trainable_parameters": False}}}},
-        }}}}
+    record = {
+        "network": {
+            "n_parameters": 1234,
+            "source": "test",
+            "config": {
+                "class_name": "Approx",
+                "config": {
+                    "name": "approx",
+                    "flow_chunk_size": None,
+                    "item_posterior": "flow",
+                    "summary_network": {
+                        "class_name": "Summary",
+                        "config": {
+                            "name": "s",
+                            "dtype": {"class_name": "DTypePolicy"},
+                            "embed_dim": 32,
+                            "raw_feature_channels": ["a", "b"],
+                        },
+                    },
+                    "inference_network": {
+                        "class_name": "CouplingFlow",
+                        "config": {
+                            "depth": 6,
+                            "base_distribution": {
+                                "class_name": "DiagonalNormal",
+                                "config": {
+                                    "mean": {"class_name": "__tensor__"},
+                                    "trainable_parameters": False,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+    }
     groups = ch.network_groups(record)
     tables = {g["title"]: dict(g["rows"]) for g in groups if "rows" in g}
     assert tables["Approximator (Approx)"] == {
-        "n_parameters": "1,234", "flow_chunk_size": "None", "item_posterior": "flow"}
+        "n_parameters": "1,234",
+        "flow_chunk_size": "None",
+        "item_posterior": "flow",
+    }
     assert tables["Summary network (Summary)"] == {
-        "embed_dim": "32", "raw_feature_channels": '["a", "b"]'}
+        "embed_dim": "32",
+        "raw_feature_channels": '["a", "b"]',
+    }
     assert tables["Inference network (CouplingFlow)"] == {
-        "depth": "6", "base_distribution": "DiagonalNormal",
-        "base_distribution.trainable_parameters": "false"}
+        "depth": "6",
+        "base_distribution": "DiagonalNormal",
+        "base_distribution.trainable_parameters": "false",
+    }
     assert groups[-1] == {"source": "test"}
     assert ch.network_groups({}) is None
 
