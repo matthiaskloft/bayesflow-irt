@@ -49,9 +49,9 @@ def main() -> int:
     regex = re.compile("|".join(f"(?:{p})" for p in patterns), re.IGNORECASE)
 
     diff = subprocess.run(
-        ["git", "-c", "core.quotePath=false", "diff", "--unified=0",
-         f"{base}...HEAD"],
-        capture_output=True, check=True,
+        ["git", "-c", "core.quotePath=false", "diff", "--unified=0", f"{base}...HEAD"],
+        capture_output=True,
+        check=True,
     ).stdout.decode("utf-8", errors="replace")
 
     # File headers only appear between "diff --git" and the first hunk, so an
