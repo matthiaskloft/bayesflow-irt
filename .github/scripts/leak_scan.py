@@ -53,12 +53,19 @@ def main() -> int:
         check=True,
     ).stdout
 
-    hits, path, line_no = [], None, 0
+    # File headers only appear between "diff --git" and the first hunk, so an
+    # added line that starts with "++ " is never mistaken for one.
+    hits, path, line_no, in_header = [], None, 0, False
     for line in diff.splitlines():
-        if line.startswith("+++ "):
+        if line.startswith("diff --git "):
+            in_header, path = True, None
+        elif in_header and line.startswith("+++ "):
             path = _diff_path(line[4:])
         elif line.startswith("@@"):
+            in_header = False
             line_no = int(re.search(r"\+(\d+)", line).group(1))
+        elif in_header:
+            continue
         elif line.startswith("+") and path and path != SELF:
             if regex.search(line[1:]):
                 # Do not echo the line: the match may itself be private.
