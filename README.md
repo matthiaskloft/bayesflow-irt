@@ -8,6 +8,11 @@ Bayesian inference in Item Response Theory (IRT) models: train a network once on
 simulated response matrices, then draw posteriors for new data sets without
 refitting, for any number of items and persons within the trained range.
 
+> [!WARNING]
+> This package is under active development. Breaking changes to the API and
+> to saved-model formats may happen between releases; pin a version if you
+> depend on it.
+
 ## What is included
 
 - Variable-size simulators and adapters for the 1PL, 2PL, PCM, and GPCM models
