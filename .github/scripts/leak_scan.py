@@ -31,7 +31,9 @@ SELF = ".github/scripts/leak_scan.py"
 def _diff_path(header: str) -> str | None:
     """Return the new-file path of a ``+++`` header, decoding Git's C quoting."""
     if header.startswith('"') and header.endswith('"'):
-        raw = header[1:-1].encode("latin-1", "backslashreplace")
+        # unicode_escape reads bytes as Latin-1, so literal UTF-8 bytes and
+        # octal escapes both come back as single code points 0-255.
+        raw = header[1:-1].encode("utf-8")
         header = raw.decode("unicode_escape").encode("latin-1").decode("utf-8")
     return header[2:] if header.startswith("b/") else None
 
@@ -49,14 +51,15 @@ def main() -> int:
     diff = subprocess.run(
         ["git", "-c", "core.quotePath=false", "diff", "--unified=0",
          f"{base}...HEAD"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        check=True,
-    ).stdout
+        capture_output=True, check=True,
+    ).stdout.decode("utf-8", errors="replace")
 
     # File headers only appear between "diff --git" and the first hunk, so an
     # added line that starts with "++ " is never mistaken for one.
     hits, path, line_no, in_header = [], None, 0, False
-    for line in diff.splitlines():
+    # Split on "\n" only: splitlines() also breaks at U+2028 and similar
+    # characters, which would hide the rest of an added line from the scan.
+    for line in diff.split("\n"):
         if line.startswith("diff --git "):
             in_header, path = True, None
         elif in_header and line.startswith("+++ "):
