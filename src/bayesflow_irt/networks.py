@@ -478,7 +478,7 @@ class _HartfordEMNBlock(keras.Layer):
         # Hartford term) and leaves `norm` unused/None.
         if norm_placement == "per_branch":
             self.norm = None
-            self.branch_norms = [
+            self.branch_norms: list | None = [
                 layers.LayerNormalization(axis=-1, name=f"branch_norm_{term}")
                 for term in ("self", "row_mean", "col_mean", "global")
             ]
@@ -1870,7 +1870,7 @@ class MatrixEquivariantIRTSummary(keras.Layer):
             embed_dim if parameter_head_dim is None else parameter_head_dim
         )
         if num_parameter_heads > 0:
-            self.parameter_head_layers = [
+            self.parameter_head_layers: list | None = [
                 layers.Dense(
                     self._parameter_head_dim,
                     activation="mish",

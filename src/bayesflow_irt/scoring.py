@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     from .approximators import EquivariantIRTApproximator
 
 # Type alias for log-likelihood functions
-LogLikelihoodFn = Callable[[np.ndarray, np.ndarray, ...], np.ndarray]
+LogLikelihoodFn = Callable[..., np.ndarray]
 
 _POSTERIOR_METADATA_KEYS = {
     "n_items",
