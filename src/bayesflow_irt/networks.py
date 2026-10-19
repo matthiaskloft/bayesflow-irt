@@ -1664,9 +1664,7 @@ class MatrixEquivariantIRTSummary(keras.Layer):
             raise ValueError("matrix_hidden_dim must be a positive integer.")
         if num_matrix_blocks < 0:
             raise ValueError("num_matrix_blocks must be >= 0.")
-        if person_pooling not in (
-            "mean", "pma", "mean_pma", "mean_std", "mean_max"
-        ):
+        if person_pooling not in ("mean", "pma", "mean_pma", "mean_std", "mean_max"):
             raise ValueError(
                 "person_pooling must be 'mean', 'pma', 'mean_pma', "
                 "'mean_std', or 'mean_max'."

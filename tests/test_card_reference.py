@@ -14,15 +14,25 @@ from bayesflow_irt.card_reference import card_value, difference, load_reference
 def _ref(inp, **over):
     (i, p) = sorted(inp.cells)[0]
     raw = {
-        "reference_format": 1, "name": "Stan NUTS", "estimator": "NUTS, 4 chains.",
+        "reference_format": 1,
+        "name": "Stan NUTS",
+        "estimator": "NUTS, 4 chains.",
         "family": inp.spec["model"],
         "datasets": {"kind": "own", "description": "25 datasets per cell"},
-        "priors": None, "provenance": {"script": "x.py"},
+        "priors": None,
+        "provenance": {"script": "x.py"},
         "notes": {"theta.corr": "pooled over persons"},
-        "cells": [{"n_items": i, "n_persons": p,
-                   "metrics": {"theta.corr": [0.8, 0.02],
-                               "theta.coverage_dev_0.95": [-0.01, None]}},
-                  {"n_items": 999, "n_persons": 7, "metrics": {}}],
+        "cells": [
+            {
+                "n_items": i,
+                "n_persons": p,
+                "metrics": {
+                    "theta.corr": [0.8, 0.02],
+                    "theta.coverage_dev_0.95": [-0.01, None],
+                },
+            },
+            {"n_items": 999, "n_persons": 7, "metrics": {}},
+        ],
     }
     raw.update(over)
     return raw
@@ -49,13 +59,19 @@ def test_reference_reaches_markdown_and_payload(card_dir, tmp_path):  # noqa: F8
     assert list(comp["cells"].values())[0]["theta.corr"] == [0.8, 0.02]
 
 
-@pytest.mark.parametrize("over, match", [
-    ({"reference_format": 9}, "reference_format"),
-    ({"family": "gpcm_x"}, "family"),
-    ({"datasets": {"kind": "card", "seed": 12345, "protocol_version": 1}}, "seed"),
-    ({"datasets": {"kind": "maybe"}}, "datasets.kind"),
-    ({"cells": [{"n_items": 999, "n_persons": 7, "metrics": {}}]}, "none of its cells"),
-])
+@pytest.mark.parametrize(
+    "over, match",
+    [
+        ({"reference_format": 9}, "reference_format"),
+        ({"family": "gpcm_x"}, "family"),
+        ({"datasets": {"kind": "card", "seed": 12345, "protocol_version": 1}}, "seed"),
+        ({"datasets": {"kind": "maybe"}}, "datasets.kind"),
+        (
+            {"cells": [{"n_items": 999, "n_persons": 7, "metrics": {}}]},
+            "none of its cells",
+        ),
+    ],
+)
 def test_bad_references_are_refused(card_dir, tmp_path, over, match):  # noqa: F811
     card = _copy(card_dir, tmp_path)
     inp = cr.load_card_inputs(card)
@@ -69,8 +85,10 @@ def test_unknown_metric_and_malformed_value_are_refused(card_dir, tmp_path):  # 
     card = _copy(card_dir, tmp_path)
     inp = cr.load_card_inputs(card)
     (i, p) = sorted(inp.cells)[0]
-    for metrics, match in [({"theta.made_up": [1.0, 0.1]}, "does not show"),
-                           ({"theta.corr": 0.8}, r"\[value, mcse\]")]:
+    for metrics, match in [
+        ({"theta.made_up": [1.0, 0.1]}, "does not show"),
+        ({"theta.corr": 0.8}, r"\[value, mcse\]"),
+    ]:
         raw = _ref(inp, cells=[{"n_items": i, "n_persons": p, "metrics": metrics}])
         path = tmp_path / "r.json"
         path.write_text(json.dumps(raw), encoding="utf-8")
@@ -82,9 +100,15 @@ def test_paired_reference_with_the_card_seed_loads(card_dir, tmp_path):  # noqa:
     card = _copy(card_dir, tmp_path)
     inp = cr.load_card_inputs(card)
     proto = inp.record["protocol"]
-    raw = _ref(inp, datasets={"kind": "card", "seed": proto["seed"],
-                              "protocol_version": proto["protocol_version"]},
-               priors=inp.spec.get("priors"))
+    raw = _ref(
+        inp,
+        datasets={
+            "kind": "card",
+            "seed": proto["seed"],
+            "protocol_version": proto["protocol_version"],
+        },
+        priors=inp.spec.get("priors"),
+    )
     path = tmp_path / "r.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     ref = load_reference(path, inp)
@@ -95,15 +119,29 @@ def test_markdown_extreme_share_matches_the_dashboard(card_dir, tmp_path):  # no
     card = _copy(card_dir, tmp_path)
     inp = cr.load_card_inputs(card)
     (i, p) = sorted(inp.cells)[0]
-    _write(card, _ref(inp, cells=[{"n_items": i, "n_persons": p,
-                                   "metrics": {"theta.extreme_share": [0.1, 0.01]}}]))
+    _write(
+        card,
+        _ref(
+            inp,
+            cells=[
+                {
+                    "n_items": i,
+                    "n_persons": p,
+                    "metrics": {"theta.extreme_share": [0.1, 0.01]},
+                }
+            ],
+        ),
+    )
     inp = cr.load_card_inputs(card)
     md = cr.render_markdown(inp)
     (row,) = [r for r in md.splitlines() if "`theta.extreme_share`" in r]
     html = ch.render_html(inp)
     data = json.loads(re.search(r'id="card-data">(.*?)</script>', html, re.S).group(1))
-    (cell,) = [c for c in data["cells"]
-               if (c["cell"]["n_items"], c["cell"]["n_persons"]) == (i, p)]
+    (cell,) = [
+        c
+        for c in data["cells"]
+        if (c["cell"]["n_items"], c["cell"]["n_persons"]) == (i, p)
+    ]
     share = cell["derived"]["extreme_share"][0]
     assert share is not None and cr._pm([share, None]).split(" ")[0] in row
     # The paired MCSE is an approximation, not a bound.

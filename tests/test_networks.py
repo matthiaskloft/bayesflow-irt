@@ -310,9 +310,7 @@ class TestMatrixEquivariantIRTSummary:
         x = _random_responses()
         first = ops.convert_to_numpy(net(x, training=False))
         perm = np.random.default_rng(0).permutation(ops.shape(x)[1])
-        second = ops.convert_to_numpy(
-            net(ops.take(x, perm, axis=1), training=False)
-        )
+        second = ops.convert_to_numpy(net(ops.take(x, perm, axis=1), training=False))
         assert np.allclose(first, second, atol=1e-5)
 
     def test_mean_max_rejects_person_chunking(self):
@@ -1014,9 +1012,10 @@ class TestMatrixEquivariantIRTSummary:
         # With dropout the device matters: only CPU/CUDA snapshot the RNG the
         # backward recompute consumes, so pass an actual backend tensor whose
         # device the gate can inspect.
-        assert net_dropout._can_use_trainable_chunking(
-            ops.convert_to_tensor(x)
-        ) == is_torch
+        assert (
+            net_dropout._can_use_trainable_chunking(ops.convert_to_tensor(x))
+            == is_torch
+        )
 
     @pytest.mark.skipif(
         keras.backend.backend() != "torch",
@@ -1243,8 +1242,7 @@ class TestMatrixEquivariantIRTSummary:
 
                 ctx = f"num_matrix_blocks={num_matrix_blocks}, chunk_size={chunk_size}"
                 assert trainable_spy.call_count == 1, (
-                    f"{ctx}: trainable chunked path was not invoked during "
-                    "training"
+                    f"{ctx}: trainable chunked path was not invoked during training"
                 )
                 assert numpy_staged_spy.call_count == 0, (
                     f"{ctx}: NumPy-staged (autograd-detaching) path was "
@@ -1262,8 +1260,7 @@ class TestMatrixEquivariantIRTSummary:
                     if w.path in dense_grads and w.value.grad is None
                 ]
                 assert missing == [], (
-                    f"{ctx}: weights with None gradient under chunking: "
-                    f"{missing}"
+                    f"{ctx}: weights with None gradient under chunking: {missing}"
                 )
                 for w in net.trainable_weights:
                     if w.path not in dense_grads:
@@ -1853,9 +1850,7 @@ class TestMatrixEquivariantIRTSummaryRawFeatures:
                 "item_rest_correlation_shuffled",
             ),
         )
-        x = np.random.default_rng(13).integers(0, 2, size=(2, 20, 6)).astype(
-            np.float32
-        )
+        x = np.random.default_rng(13).integers(0, 2, size=(2, 20, 6)).astype(np.float32)
         out = ops.convert_to_numpy(net(x, training=False))
         assert np.isfinite(out).all()
         assert net._outer_input_dim == net._pooled_dim + 2

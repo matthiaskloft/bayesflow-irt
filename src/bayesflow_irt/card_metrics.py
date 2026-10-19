@@ -213,19 +213,28 @@ def parameter_metrics(draws: np.ndarray, truth: np.ndarray) -> dict[str, Any]:
     else:
         out["z_mean"] = out["z_sd"] = (float("nan"), float("nan"))
     q = np.quantile(draws, [0.025, 0.975], axis=1)
-    out["pairs"] = {k: [float(f"{x:.4g}") for x in v] for k, v in (
-        ("truth", truth), ("mean", estimate), ("sd", sd),
-        ("q025", q[0]), ("q975", q[1]))}
+    out["pairs"] = {
+        k: [float(f"{x:.4g}") for x in v]
+        for k, v in (
+            ("truth", truth),
+            ("mean", estimate),
+            ("sd", sd),
+            ("q025", q[0]),
+            ("q975", q[1]),
+        )
+    }
 
     lo, hi = _central_intervals(draws, CALIBRATION_LEVELS)
     cal = ((lo <= truth[:, None]) & (truth[:, None] <= hi)).astype(float)
     dev = np.abs(cal.mean(axis=0) - CALIBRATION_LEVELS)
     dev_loo = np.abs(_loo_means(cal) - CALIBRATION_LEVELS)
     out["mean_calibration_error"] = (
-        float(dev.mean()), jackknife_se(dev_loo.mean(axis=1))
+        float(dev.mean()),
+        jackknife_se(dev_loo.mean(axis=1)),
     )
     out["calibration_error"] = (
-        float(np.median(dev)), jackknife_se(np.median(dev_loo, axis=1))
+        float(np.median(dev)),
+        jackknife_se(np.median(dev_loo, axis=1)),
     )
     # Coverage at each of those levels, for the detail plot; the MCSE of a
     # mean over datasets (equal to its jackknife SE).

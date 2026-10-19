@@ -163,9 +163,7 @@ class TestMatrixIRTSummarySpace:
         """person_context is not a search dimension (redundant with the
         EMN row-mean term)."""
         space = MatrixIRTSummarySpace()
-        assert not any(
-            d.name == "irt_matrix_person_context" for d in space.dimensions
-        )
+        assert not any(d.name == "irt_matrix_person_context" for d in space.dimensions)
 
     def test_include_rest_mean_score_choices(self):
         space = MatrixIRTSummarySpace()
@@ -655,9 +653,7 @@ class TestMakeIRTHooks:
         )
         assert batch.low is not None and batch.high is not None
 
-    def test_training_space_override_pins_the_dimension(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_training_space_override_pins_the_dimension(self, sim_2pl, adapter_2pl):
         """A pinned dimension must leave the sampler, not merely be bounded.
 
         `constant=` is injected by `sample()` without reaching Optuna, so the
@@ -669,9 +665,7 @@ class TestMakeIRTHooks:
         from bayesflow_hpo import TrainingSpace
         from bayesflow_hpo.search_spaces.base import IntDimension
 
-        override = TrainingSpace(
-            batch_size=IntDimension("batch_size", constant=192)
-        )
+        override = TrainingSpace(batch_size=IntDimension("batch_size", constant=192))
         hooks = make_irt_hooks(
             sim_2pl,
             adapter_2pl,
@@ -743,9 +737,7 @@ class TestMakeIRTHooks:
             )
         assert self._mean_budget_warnings(caplog)
 
-    def test_unequal_budget_with_mapped_mean_warns(
-        self, sim_2pl, adapter_2pl, caplog
-    ):
+    def test_unequal_budget_with_mapped_mean_warns(self, sim_2pl, adapter_2pl, caplog):
         """A per-metric mapping must reach the same warning as the string."""
         with caplog.at_level(logging.WARNING, logger="bayesflow_irt.hpo"):
             make_irt_hooks(
@@ -758,9 +750,7 @@ class TestMakeIRTHooks:
             )
         assert self._mean_budget_warnings(caplog)
 
-    def test_unequal_budget_with_geometric_warns(
-        self, sim_2pl, adapter_2pl, caplog
-    ):
+    def test_unequal_budget_with_geometric_warns(self, sim_2pl, adapter_2pl, caplog):
         """``geometric`` averages in log space, so it has the same problem.
 
         A config selecting ``{"nrmse": "geometric"}`` together with a
@@ -777,9 +767,7 @@ class TestMakeIRTHooks:
             )
         assert self._mean_budget_warnings(caplog)
 
-    def test_unequal_budget_with_worst_still_warns(
-        self, sim_2pl, adapter_2pl, caplog
-    ):
+    def test_unequal_budget_with_worst_still_warns(self, sim_2pl, adapter_2pl, caplog):
         """The objective does not decide whether averaged keys are recorded.
 
         ``aggregate="worst"`` leaves the OBJECTIVE unaffected -- a worst case
@@ -971,9 +959,7 @@ class TestMakeIRTHooks:
         assert isinstance(hooks, IRTHooks)
 
     @pytest.mark.slow
-    def test_pipeline_check_rejects_a_broken_joint_metric(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_pipeline_check_rejects_a_broken_joint_metric(self, sim_2pl, adapter_2pl):
         """The preflight must see joint metrics, not just marginal ones.
 
         The joint guard omits a metric that failed, so a broken reference
@@ -981,6 +967,7 @@ class TestMakeIRTHooks:
         strength of the marginal metrics alone -- the opposite of what the
         check exists for.
         """
+
         def _broken(inputs):
             raise RuntimeError("provider is broken")
 
@@ -1177,9 +1164,9 @@ class TestMultiOutputMarginalMetrics:
     ):
         """The NaN is the harmful half: Optuna reads it as a failed trial."""
         result = self._result(sim_2pl, adapter_2pl, metrics=["coverage"])
-        assert not (
-            "coverage" in result and np.isnan(result["coverage"])
-        ), "the group name is back, and NaN"
+        assert not ("coverage" in result and np.isnan(result["coverage"])), (
+            "the group name is back, and NaN"
+        )
 
     def test_a_single_output_metric_is_unchanged(self, sim_2pl, adapter_2pl):
         """`output_keys_for` is the identity here, so nothing may move."""
@@ -1214,9 +1201,7 @@ class TestMultiOutputMarginalMetrics:
         assert result["coverage_90"] == result["coverage_90/geometric"]
         assert result["coverage_95"] == result["coverage_95/mean"]
 
-    def test_a_producer_mapping_is_not_reported_as_inert(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_a_producer_mapping_is_not_reported_as_inert(self, sim_2pl, adapter_2pl):
         """The inert-key check must credit the producer for its columns.
 
         It raises `AggregationConfigError` to stop a study whose mapping
@@ -1289,9 +1274,7 @@ class TestValidateFnFlowSampleKwargs:
         for call in mock_approx.sample.call_args_list:
             assert call[1]["flow_sample_kwargs"] == override
 
-    def test_the_default_leaves_the_sample_call_untouched(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_the_default_leaves_the_sample_call_untouched(self, sim_2pl, adapter_2pl):
         """Not merely absent-and-empty: the kwarg must not be passed at all.
 
         Omitting it must leave the call identical to the default.
@@ -1304,9 +1287,7 @@ class TestValidateFnFlowSampleKwargs:
         for call in mock_approx.sample.call_args_list:
             assert "flow_sample_kwargs" not in call[1]
 
-    def test_an_empty_mapping_is_treated_as_no_override(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_an_empty_mapping_is_treated_as_no_override(self, sim_2pl, adapter_2pl):
         hooks = self._hooks(sim_2pl, adapter_2pl, flow_sample_kwargs={})
         mock_approx = self._mock_approx()
 
@@ -1325,9 +1306,7 @@ class TestValidateFnFlowSampleKwargs:
         with pytest.raises(TypeError, match="flow_sample_kwargs"):
             self._hooks(sim_2pl, adapter_2pl, flow_sample_kwargs="euler")
 
-    def test_the_caller_mapping_is_copied_not_captured(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_the_caller_mapping_is_copied_not_captured(self, sim_2pl, adapter_2pl):
         """Mutating the dict after building the hooks must not silently change
         what later trials are scored under."""
         override = {"method": "euler", "steps": 16}
@@ -1432,9 +1411,7 @@ class TestCornerAggregation:
         self, sim_2pl, adapter_2pl, monkeypatch
     ):
         """A good corner must not be allowed to hide a bad one."""
-        self._hooks_with_metric(
-            sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9], "nrmse"
-        )
+        self._hooks_with_metric(sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9], "nrmse")
         hooks = make_irt_hooks(
             sim_2pl,
             adapter_2pl,
@@ -1454,9 +1431,7 @@ class TestCornerAggregation:
 
     def _worst_corner_hooks(self, sim, adapter, monkeypatch, per_corner):
         """Hooks over two labelled corners with scripted per-corner values."""
-        self._hooks_with_metric(
-            sim, adapter, monkeypatch, per_corner, "nrmse"
-        )
+        self._hooks_with_metric(sim, adapter, monkeypatch, per_corner, "nrmse")
         hooks = make_irt_hooks(
             sim,
             adapter,
@@ -1481,9 +1456,7 @@ class TestCornerAggregation:
         and a finished study cannot tell whether two trials' `nrmse` values
         even describe the same corner.
         """
-        result = self._worst_corner_hooks(
-            sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9]
-        )
+        result = self._worst_corner_hooks(sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9])
         assert result["nrmse"] == pytest.approx(0.9)
         # 0.9 came from the second corner, (5, 30).
         assert result["nrmse/worst_corner"] == pytest.approx(1.0)
@@ -1494,9 +1467,7 @@ class TestCornerAggregation:
         self, sim_2pl, adapter_2pl, monkeypatch
     ):
         """Reversing the corners must move the reported corner with them."""
-        result = self._worst_corner_hooks(
-            sim_2pl, adapter_2pl, monkeypatch, [0.9, 0.1]
-        )
+        result = self._worst_corner_hooks(sim_2pl, adapter_2pl, monkeypatch, [0.9, 0.1])
         assert result["nrmse"] == pytest.approx(0.9)
         assert result["nrmse/worst_corner"] == pytest.approx(0.0)
         assert result["nrmse/worst_n_items"] == pytest.approx(3.0)
@@ -1529,9 +1500,7 @@ class TestCornerAggregation:
         cross-trial corner comparison in a finished study would shift
         without any value changing.
         """
-        result = self._worst_corner_hooks(
-            sim_2pl, adapter_2pl, monkeypatch, [0.5, 0.5]
-        )
+        result = self._worst_corner_hooks(sim_2pl, adapter_2pl, monkeypatch, [0.5, 0.5])
         assert result["nrmse"] == pytest.approx(0.5)
         assert result["nrmse/worst_corner"] == pytest.approx(0.0)
         assert result["nrmse/worst_n_items"] == pytest.approx(3.0)
@@ -1606,9 +1575,7 @@ class TestCornerAggregation:
         it won by 0.8 or by 0.001 -- that is, whether "worst" was a
         decision or a coin flip.
         """
-        result = self._worst_corner_hooks(
-            sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9]
-        )
+        result = self._worst_corner_hooks(sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9])
         assert result["nrmse/worst_corner"] == pytest.approx(1.0)
         assert result["nrmse/corner_0/worst"] == pytest.approx(0.1)
         assert result["nrmse/corner_1/worst"] == pytest.approx(0.9)
@@ -1719,9 +1686,7 @@ class TestCornerAggregation:
             param_keys=["a", "b"],
             metrics=["nrmse"],
             sims_per_corner=4,
-            joint_metrics={
-                "probe": lambda inputs: {"nrmse/corner_0/mean": 999.0}
-            },
+            joint_metrics={"probe": lambda inputs: {"nrmse/corner_0/mean": 999.0}},
         )
         with pytest.raises(hpo_mod.AggregationConfigError, match="corner_"):
             hooks.validate_fn(_mock_2pl_approx(), None, 8)
@@ -1751,9 +1716,7 @@ class TestCornerAggregation:
     def test_mean_is_still_available_and_reproduces_the_old_number(
         self, sim_2pl, adapter_2pl, monkeypatch
     ):
-        self._hooks_with_metric(
-            sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9], "nrmse"
-        )
+        self._hooks_with_metric(sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9], "nrmse")
         hooks = make_irt_hooks(
             sim_2pl,
             adapter_2pl,
@@ -1778,9 +1741,7 @@ class TestCornerAggregation:
         per-corner rows exist, so a study's stored trials should never be
         unable to answer a question its own data contains.
         """
-        self._hooks_with_metric(
-            sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9], "nrmse"
-        )
+        self._hooks_with_metric(sim_2pl, adapter_2pl, monkeypatch, [0.1, 0.9], "nrmse")
         hooks = make_irt_hooks(
             sim_2pl,
             adapter_2pl,
@@ -1854,9 +1815,7 @@ class TestDefaultObjectiveMetrics:
         validate_objective_metric_kinds(hpo_mod.DEFAULT_OBJECTIVE_METRICS)
 
     def test_objectives_are_a_subset_of_what_is_computed(self):
-        assert set(hpo_mod.DEFAULT_OBJECTIVE_METRICS) <= set(
-            hpo_mod._DEFAULT_METRICS
-        )
+        assert set(hpo_mod.DEFAULT_OBJECTIVE_METRICS) <= set(hpo_mod._DEFAULT_METRICS)
 
     def test_nrmse_is_an_objective(self):
         """The guard against a posterior that ignores the data.
@@ -2208,6 +2167,7 @@ class TestValidateFnJointDispatch:
         `tarp_error` registers `worst_raw=1.0`. 0.0 would make a broken
         measurement the best trial in the study.
         """
+
         def _explode(inputs):
             raise RuntimeError("boom")
 
@@ -2450,17 +2410,15 @@ class TestJointFailureInvalidation:
     def test_a_non_mapping_return_does_not_take_the_trial_down(
         self, sim_2pl, adapter_2pl
     ):
-        result = self._hooks(
-            sim_2pl, adapter_2pl, lambda inputs: 0.5
-        ).validate_fn(_mock_2pl_approx(), None, 8)
+        result = self._hooks(sim_2pl, adapter_2pl, lambda inputs: 0.5).validate_fn(
+            _mock_2pl_approx(), None, 8
+        )
         # The marginal metrics the trial already computed survive.
         assert "tarp_error" not in result
         assert "nrmse" in result
         assert "calibration_error" in result
 
-    def test_the_emitted_key_is_dropped_not_the_mapping_key(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_the_emitted_key_is_dropped_not_the_mapping_key(self, sim_2pl, adapter_2pl):
         """A joint metric's emitted key need not be its mapping key.
 
         `make_tarp_joint_metric()` with the provider forgotten emits
@@ -2468,6 +2426,7 @@ class TestJointFailureInvalidation:
         invalidation keyed on the mapping key alone, the computed value
         would survive under a name nothing asked for.
         """
+
         def _mismatched(inputs):
             if inputs.cond_id == 1:
                 raise RuntimeError("boom")
@@ -2491,8 +2450,6 @@ class TestJointFailureInvalidation:
             aggregate="mean",
         ).validate_fn(_mock_2pl_approx(), None, 8)
         assert result["tarp_error_random"] == pytest.approx(0.02)
-
-
 
     def test_mapping_key_never_emitted_is_not_fabricated(
         self, sim_2pl, adapter_2pl, caplog
@@ -2531,17 +2488,14 @@ class TestJointFailureInvalidation:
             for r in caplog.records
         )
 
-
-
-    def test_omitting_a_key_on_a_later_corner_invalidates(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_omitting_a_key_on_a_later_corner_invalidates(self, sim_2pl, adapter_2pl):
         """An omitted key is as quiet as a NaN, and just as wrong.
 
         Returning `{"tarp_error": 0.01}` on one corner and `{}` on the next
         reported `tarp_error/worst == 0.01` -- a clean worst-case guarantee
         derived from half the grid.
         """
+
         def _partial(inputs):
             return {"tarp_error": 0.01} if inputs.cond_id == 0 else {}
 
@@ -2589,9 +2543,7 @@ class TestJointMetricsOverrideMarginalResolution:
     `joint_metrics=` runs whether or not its name appears in `metrics`.
     """
 
-    def test_unregistered_name_in_both_lists_runs_as_joint(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_unregistered_name_in_both_lists_runs_as_joint(self, sim_2pl, adapter_2pl):
         hooks = make_irt_hooks(
             sim_2pl,
             adapter_2pl,
@@ -2730,9 +2682,7 @@ class TestItemPooledTarp:
             "delta": np.zeros((n_sims, n_items, n_cat)),
         }
         refs = np.zeros((n_sims, n_items + n_items * n_cat))
-        fn = hpo_mod.make_tarp_item_metric(
-            ["a", "delta"], reference_points=refs
-        )
+        fn = hpo_mod.make_tarp_item_metric(["a", "delta"], reference_points=refs)
         with pytest.raises(ValueError, match="more than an item axis"):
             fn(inputs)
 
@@ -2811,18 +2761,14 @@ class TestPerMetricAggregation:
             aggregate=aggregate,
         )
 
-    def test_all_three_reductions_are_always_reported(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_all_three_reductions_are_always_reported(self, sim_2pl, adapter_2pl):
         hooks = self._hooks(sim_2pl, adapter_2pl, "worst")
         result = hooks.validate_fn(_mock_2pl_approx(), None, 8)
         for suffix in ("mean", "worst", "geometric"):
             assert f"nrmse/{suffix}" in result, suffix
 
     def test_a_mapping_selects_per_metric(self, sim_2pl, adapter_2pl):
-        hooks = self._hooks(
-            sim_2pl, adapter_2pl, {"nrmse": "geometric"}
-        )
+        hooks = self._hooks(sim_2pl, adapter_2pl, {"nrmse": "geometric"})
         result = hooks.validate_fn(_mock_2pl_approx(), None, 8)
         assert result["nrmse"] == result["nrmse/geometric"]
         # Unnamed metrics keep "worst", NOT bayesflow_hpo's "mean" default.
@@ -2872,9 +2818,7 @@ class TestPerMetricAggregation:
         with pytest.raises(ValueError, match="must be one of"):
             self._hooks(sim_2pl, adapter_2pl, {"nrmse": "median"})
 
-    def test_a_key_that_is_never_computed_is_refused(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_a_key_that_is_never_computed_is_refused(self, sim_2pl, adapter_2pl):
         """A silently-inert key leaves the metric on the default reduction."""
         with pytest.raises(ValueError, match="does not compute"):
             self._hooks(sim_2pl, adapter_2pl, {"nrsme": "geometric"})
@@ -2965,9 +2909,7 @@ class TestPerMetricAggregation:
                 sims_per_corner=2,
             )
 
-    def test_a_mapping_works_with_the_default_metric_list(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_a_mapping_works_with_the_default_metric_list(self, sim_2pl, adapter_2pl):
         """`metrics=None` must not make every mapping key look unknown.
 
         The key check needs the DEFAULTED metric list. Validating before the
@@ -2986,9 +2928,7 @@ class TestPerMetricAggregation:
         )
         assert hooks.validate_fn is not None
 
-    def test_a_joint_metric_may_be_named_by_either_spelling(
-        self, sim_2pl, adapter_2pl
-    ):
+    def test_a_joint_metric_may_be_named_by_either_spelling(self, sim_2pl, adapter_2pl):
         """Registration key or emitted key -- both pass construction.
 
         A callable given through `joint_metrics=` does not reveal which key

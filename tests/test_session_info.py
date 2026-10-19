@@ -13,8 +13,14 @@ from bayesflow_irt import metadata, session_info
 def test_fields_and_json_round_trip():
     info = session_info()
     assert set(info) == {
-        "timestamp", "git_commit", "git_dirty", "python", "platform",
-        "keras_backend", "packages", "gpu",
+        "timestamp",
+        "git_commit",
+        "git_dirty",
+        "python",
+        "platform",
+        "keras_backend",
+        "packages",
+        "gpu",
     }
     assert info["keras_backend"] == keras.backend.backend()
     assert info["packages"]["keras"] == keras.__version__

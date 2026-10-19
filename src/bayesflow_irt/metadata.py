@@ -202,9 +202,7 @@ def session_info() -> dict[str, Any]:
     tracked = _git(["ls-files", "--error-unmatch", Path(__file__).name], src)
     commit = _git(["rev-parse", "HEAD"], src) if tracked is not None else None
     status = (
-        _git(["status", "--porcelain", "--untracked-files=no"], src)
-        if commit
-        else None
+        _git(["status", "--porcelain", "--untracked-files=no"], src) if commit else None
     )
 
     def get_version(name: str) -> str | None:

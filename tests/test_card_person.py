@@ -118,10 +118,15 @@ def test_reproducible_and_fewer_persons_than_requested():
 def test_polytomous_curve_matches_the_scoring_likelihood():
     theta = np.linspace(-3, 3, 7)
     a, delta = np.array([1.4]), np.array([[-0.5, 0.8]])
-    probs = np.exp(np.stack([
-        _log_likelihood_gpcm(theta, np.array([k], float), a, delta)
-        for k in range(3)
-    ], axis=-1))
+    probs = np.exp(
+        np.stack(
+            [
+                _log_likelihood_gpcm(theta, np.array([k], float), a, delta)
+                for k in range(3)
+            ],
+            axis=-1,
+        )
+    )
     expected = (probs * np.arange(3)).sum(axis=-1) / 2
     got = _item_curve(theta, a, delta, True)[0]
     np.testing.assert_allclose(got, expected, rtol=1e-12)
@@ -131,8 +136,13 @@ def test_pcm_runs():
     path = SIDECARS / "pcm_equivariant_metadata.json"
     md = MetadataTracker.load(path).to_dict()
     proto = _protocol(datasets_per_cell=30, persons_scored=20)
-    s = sample_cell(FakeApproximator(sd=0.0), md["model_spec"], Cell(6, 30, True),
-                    proto, trained_at=md["provenance"]["timestamp"])
+    s = sample_cell(
+        FakeApproximator(sd=0.0),
+        md["model_spec"],
+        Cell(6, 30, True),
+        proto,
+        trained_at=md["provenance"]["timestamp"],
+    )
     out = person_metrics(s, proto)
     assert out["rimse"]["item_curve"] == "expected score / (K-1)"
     assert out["rimse"]["mean"][0] == pytest.approx(0.0, abs=1e-9)
@@ -184,8 +194,13 @@ def test_conditional_se_is_in_the_bins_for_dichotomous_only():
     path = SIDECARS / "pcm_equivariant_metadata.json"
     md = MetadataTracker.load(path).to_dict()
     proto = _protocol(datasets_per_cell=20, persons_scored=10)
-    s = sample_cell(FakeApproximator(sd=0.0), md["model_spec"], Cell(6, 30, True),
-                    proto, trained_at=md["provenance"]["timestamp"])
+    s = sample_cell(
+        FakeApproximator(sd=0.0),
+        md["model_spec"],
+        Cell(6, 30, True),
+        proto,
+        trained_at=md["provenance"]["timestamp"],
+    )
     out = person_metrics(s, proto)
     assert "omitted" in out["reliability"]["information"]
     assert all("conditional_se" not in b for b in out["conditional"])
@@ -197,6 +212,7 @@ def test_theta_prior_defaults_to_the_normal_sampler_defaults():
     from bayesflow_irt.card import _theta_prior
 
     assert _theta_prior({"priors": {"theta": {"name": "normal"}}}) == (0.0, 1.0)
-    assert _theta_prior(
-        {"priors": {"theta": {"name": "normal", "loc": 0.5}}}
-    ) == (0.5, 1.0)
+    assert _theta_prior({"priors": {"theta": {"name": "normal", "loc": 0.5}}}) == (
+        0.5,
+        1.0,
+    )

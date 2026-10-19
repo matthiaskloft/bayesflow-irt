@@ -970,8 +970,12 @@ class TestSizeDistribution:
 
     def _sim(self, **kw):
         return make_2pl_simulator(
-            n_items=(5, 50), n_persons=(10, 500), prior_a=_PRIOR_A,
-            prior_b=_PRIOR_B, seed=0, **kw,
+            n_items=(5, 50),
+            n_persons=(10, 500),
+            prior_a=_PRIOR_A,
+            prior_b=_PRIOR_B,
+            seed=0,
+            **kw,
         )
 
     def test_log_uniform_draws_match_stated_probabilities(self):
@@ -981,8 +985,10 @@ class TestSizeDistribution:
         assert probs.sum() == pytest.approx(1.0)
         rng = np.random.default_rng(1)
         draws = np.array(
-            [_draw_bucketed_size(rng, (10, 500), None, "log_uniform")
-             for _ in range(20000)]
+            [
+                _draw_bucketed_size(rng, (10, 500), None, "log_uniform")
+                for _ in range(20000)
+            ]
         )
         assert draws.min() >= 10 and draws.max() <= 500
         # Share of small datasets: stated vs drawn, and far above uniform.
@@ -1006,8 +1012,10 @@ class TestSizeDistribution:
         np.testing.assert_allclose(probs, 0.7 * logp + 0.3 / values.size)
         rng = np.random.default_rng(2)
         draws = np.array(
-            [_draw_bucketed_size(rng, (10, 500), None, "mixed", 0.7)
-             for _ in range(20000)]
+            [
+                _draw_bucketed_size(rng, (10, 500), None, "mixed", 0.7)
+                for _ in range(20000)
+            ]
         )
         assert np.mean(draws <= 24) == pytest.approx(
             probs[values <= 24].sum(), abs=0.01
@@ -1070,8 +1078,11 @@ class TestSizeDistribution:
         from bayesflow_irt.simulators import describe_size_sampling
 
         sim = make_2pl_simulator(
-            n_items=(5, 50), n_persons=(10, 1_000_000), prior_a=_PRIOR_A,
-            prior_b=_PRIOR_B, size_distribution="log_uniform",
+            n_items=(5, 50),
+            n_persons=(10, 1_000_000),
+            prior_a=_PRIOR_A,
+            prior_b=_PRIOR_B,
+            size_distribution="log_uniform",
         )
         axis = describe_size_sampling(sim)["n_persons"]
         assert axis["values"] is None and axis["probabilities"] is None
