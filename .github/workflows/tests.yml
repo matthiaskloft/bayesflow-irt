@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # bayesflow-hpo is installed from PyPI through the `hpo` extra, so
+          # `tests/test_hpo.py` runs instead of being skipped by its
+          # `pytest.importorskip`; CI enforces the extra's floor in
+          # pyproject.toml.
+          #
+          # ONE pip command: bayesflow-hpo pins `keras>=3.9,<3.13` and this
+          # package asks for `keras>=3.12.1`, so resolving them together
+          # turns a genuine conflict into an install error instead of a
+          # silently inconsistent env.
+          pip install -e ".[dev,torch,hpo]"
+
+      - name: Run tests
+        env:
+          KERAS_BACKEND: torch
+        run: pytest tests/ -v

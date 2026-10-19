@@ -1,0 +1,105 @@
+{
+  "model_info": {
+    "model": "1PL",
+    "variant": "fixed",
+    "version": "0.1.0"
+  },
+  "training_config": {
+    "priors": {
+      "b": {
+        "name": "normal",
+        "loc": 0,
+        "scale": 2.0
+      },
+      "theta": {
+        "name": "normal",
+        "loc": 0,
+        "scale": 1.0
+      }
+    },
+    "size_ranges": {
+      "n_items": [
+        5,
+        50
+      ],
+      "n_persons": [
+        10,
+        500
+      ]
+    },
+    "hparams": {
+      "epochs": 10,
+      "batches_per_epoch": 150,
+      "batch_size_effective": 64,
+      "val_batches": 50,
+      "optimizer": "Adam",
+      "base_lr": 0.001,
+      "min_lr": 0.0001,
+      "warmup_steps": 75
+    }
+  },
+  "phase2_metrics": {
+    "epochs": 10,
+    "per_epoch_metrics": [
+      {
+        "epoch": 1,
+        "loss": 2.0,
+        "val_loss": 1.8
+      },
+      {
+        "epoch": 2,
+        "loss": 1.0,
+        "val_loss": 0.9
+      },
+      {
+        "epoch": 3,
+        "loss": 0.6667,
+        "val_loss": 0.6
+      },
+      {
+        "epoch": 4,
+        "loss": 0.5,
+        "val_loss": 0.45
+      },
+      {
+        "epoch": 5,
+        "loss": 0.4,
+        "val_loss": 0.36
+      },
+      {
+        "epoch": 6,
+        "loss": 0.3333,
+        "val_loss": 0.3
+      },
+      {
+        "epoch": 7,
+        "loss": 0.2857,
+        "val_loss": 0.2571
+      },
+      {
+        "epoch": 8,
+        "loss": 0.25,
+        "val_loss": 0.225
+      },
+      {
+        "epoch": 9,
+        "loss": 0.2222,
+        "val_loss": 0.2
+      },
+      {
+        "epoch": 10,
+        "loss": 0.2,
+        "val_loss": 0.18
+      }
+    ]
+  },
+  "metadata_uuid": "00000000-0000-4000-8000-000000000004",
+  "provenance": {
+    "git_commit": "0000000000000000000000000000000000000000",
+    "timestamp": "2026-08-01T00:00:00+00:00",
+    "python_version": "3.11.9",
+    "keras_version": "3.12.1",
+    "bayesflow_version": "2.0.10",
+    "bayesflow_irt_version": "0.1.0"
+  }
+}

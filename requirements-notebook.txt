@@ -1,0 +1,3 @@
+# Notebook-focused environment (Python >= 3.11)
+# Includes plotting + PyTorch backend.
+-e .[examples,torch]
