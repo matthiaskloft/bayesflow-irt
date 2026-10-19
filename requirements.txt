@@ -1,0 +1,2 @@
+# Core install for bayesflow-irt (Python >= 3.11)
+-e .

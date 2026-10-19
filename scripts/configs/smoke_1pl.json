@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "Deliberately tiny 1PL config: a quick end-to-end smoke test of a new",
+    "environment: CUDA visible, simulator + adapter +",
+    "network build, memory probe runs, a real fit completes, and the checkpoint",
+    "plus UUID-linked metadata sidecar are written. Run this (or `--dry-run`",
+    "with it) before launching anything",
+    "expensive on a new machine."
+  ],
+  "model": "1pl",
+  "variant": "fixed",
+  "tag": "smoke_1pl",
+  "n_items": [5, 15],
+  "n_persons": [50, 200],
+  "seed": 20260818,
+  "priors": {
+    "b": { "name": "normal", "loc": 0.0, "scale": 1.0 },
+    "theta": { "name": "normal", "loc": 0.0, "scale": 1.0 }
+  },
+  "summary": {
+    "embed_dim": 16,
+    "matrix_hidden_dim": 32,
+    "num_matrix_blocks": 2,
+    "matrix_activation": "mish",
+    "person_pooling": "mean",
+    "num_outer_sabs": 0,
+    "dropout": 0.0,
+    "gradient_checkpointing": true
+  },
+  "flow": {
+    "widths": [64, 64],
+    "integrate_kwargs": { "method": "euler", "steps": 16 }
+  },
+  "training": {
+    "batch_size": 32,
+    "epochs": 2,
+    "batches_per_epoch": 20,
+    "val_batches": 5,
+    "base_lr": 0.001,
+    "min_lr": 0.0001,
+    "warmup_frac": 0.05
+  },
+  "probe": {
+    "enabled": true,
+    "search_tolerance": 16,
+    "safety_margin": 0.9,
+    "person_chunk_safety_factor": 0.8
+  }
+}

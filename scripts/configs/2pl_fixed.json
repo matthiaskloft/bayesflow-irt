@@ -1,0 +1,60 @@
+{
+  "_comment": [
+    "2PL, fixed-prior variant: log a ~ N(0, 0.5), b ~ N(0, 1),",
+    "I in [10, 20], P in [100, 200].",
+    "batch_size/epochs/batches_per_epoch are generous defaults for a GPU with",
+    "ample memory;",
+    "lower them for a quick run.",
+    "probe.person_chunk_safety_factor is 0.8 -- on a large GPU the probe will",
+    "typically report a chunk size at or above max(n_persons), in which case",
+    "chunking is effectively inactive.",
+    "Size buckets are off, so every (I, P) in the ranges can be drawn."
+  ],
+  "model": "2pl",
+  "variant": "fixed",
+  "tag": "2pl_fixed",
+  "n_items": [10, 20],
+  "n_persons": [100, 200],
+  "item_bucket": null,
+  "person_bucket": null,
+  "internal_parameterization": "loading",
+  "seed": 20260818,
+  "priors": {
+    "a": { "name": "lognormal", "loc": 0.0, "scale": 0.5 },
+    "b": { "name": "normal", "loc": 0.0, "scale": 1.0 },
+    "theta": { "name": "normal", "loc": 0.0, "scale": 1.0 }
+  },
+  "summary": {
+    "embed_dim": 32,
+    "matrix_hidden_dim": 16,
+    "num_matrix_blocks": 8,
+    "matrix_activation": "mish",
+    "person_pooling": "mean",
+    "num_outer_sabs": 0,
+    "dropout": 0.05,
+    "gradient_checkpointing": true
+  },
+  "flow": {
+    "widths": [64, 64],
+    "integrate_kwargs": { "method": "euler", "steps": 16 }
+  },
+  "approximator": {
+    "flow_chunk_size": 1024,
+    "flow_chunk_backward": "checkpoint"
+  },
+  "training": {
+    "batch_size": 512,
+    "epochs": 100,
+    "batches_per_epoch": 1000,
+    "val_batches": 50,
+    "base_lr": 0.001,
+    "min_lr": 0.0001,
+    "warmup_frac": 0.05
+  },
+  "probe": {
+    "enabled": true,
+    "search_tolerance": 8,
+    "safety_margin": 0.9,
+    "person_chunk_safety_factor": 0.8
+  }
+}

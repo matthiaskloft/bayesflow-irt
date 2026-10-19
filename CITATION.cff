@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the metadata below.
+title: "bayesflow-irt: amortized Bayesian inference for Item Response Theory"
+abstract: >-
+  A BayesFlow 2.x extension for amortized Bayesian inference in Item Response
+  Theory (1PL, 2PL, PCM, GPCM) with equivariant summary networks over
+  variable-size response matrices.
+type: software
+authors:
+  - family-names: Kloft
+    given-names: Matthias
+    orcid: "https://orcid.org/0000-0003-1845-6957"
+    affiliation: "Leibniz Institute for Educational Trajectories (LIfBi)"
+repository-code: "https://github.com/matthiaskloft/bayesflow-irt"
+license: MIT
+version: "0.1.0"
+date-released: "2026-10-19"
+keywords:
+  - item response theory
+  - amortized Bayesian inference
+  - simulation-based inference
+  - neural posterior estimation
+  - BayesFlow
+  - simulation-based calibration
+references:
+  - type: conference-paper
+    title: >-
+      Sampling-Based Accuracy Testing of Posterior Estimators for General
+      Inference
+    authors:
+      - family-names: Lemos
+        given-names: Pablo
+      - family-names: Coogan
+        given-names: Adam
+      - family-names: Hezaveh
+        given-names: Yashar
+      - family-names: Perreault-Levasseur
+        given-names: Laurence
+    collection-title: >-
+      Proceedings of the 40th International Conference on Machine Learning
+    year: 2023
+    notes: "TARP joint coverage testing, implemented in src/bayesflow_irt/sbc.py."

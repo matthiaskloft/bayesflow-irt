@@ -1,0 +1,37 @@
+{
+  "model_info": {
+    "model": "2pl",
+    "variant": "fixed",
+    "version": "example"
+  },
+  "hpo_results": {
+    "num_trials": 2,
+    "pareto_front": [
+      {
+        "number": 1,
+        "values": [
+          0.15,
+          0.2
+        ],
+        "params": {
+          "irt_matrix_num_blocks": 1,
+          "batch_size": 32
+        },
+        "user_attrs": {
+          "calibration_error": 0.15,
+          "nrmse": 0.2,
+          "log_gamma": null
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "git_commit": "0000000000000000000000000000000000000000",
+    "git_dirty": false,
+    "python": "3.11.9",
+    "keras": "3.12.1",
+    "keras_backend": "torch",
+    "bayesflow": "2.0.8",
+    "bayesflow_irt": "0.1.0"
+  }
+}

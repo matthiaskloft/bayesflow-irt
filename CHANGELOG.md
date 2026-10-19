@@ -1,0 +1,37 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/).
+
+## [0.1.0] - 2026-10-19
+
+First public release.
+
+### Added
+
+- Simulators and adapters for the 1PL, 2PL, PCM, and GPCM models over
+  variable-size response matrices (`make_*_simulator`, `make_*_adapter`),
+  with configurable and variable priors (`Prior`, `VariablePrior`,
+  incremental priors for PCM/GPCM) and optional numba response sampling.
+- `MatrixEquivariantIRTSummary`, a summary network exchangeable over items
+  and persons, and `EquivariantIRTApproximator` for per-item posterior
+  inference, including an autoregressive item posterior.
+- `CalibratedIRTApproximator` for calibration-aware training (optional,
+  via `bayesflow-calibration-loss`).
+- Person scoring by grid quadrature (`PersonScorer`).
+- Diagnostics: simulation-based calibration, TARP coverage, and
+  calibration error (`run_sbc_diagnostics`, `compute_tarp_coverage`,
+  `compute_calibration_error`, and related helpers).
+- Model cards: `evaluate_for_card` evaluates a trained model on a grid of
+  data sizes and `render_model_card` writes a Markdown card and an HTML
+  dashboard.
+- Metadata sidecars for trained models (`MetadataTracker`), simulator
+  rebuilds from a sidecar (`build_simulator`), and data checks against the
+  trained range (`check_data`).
+- Memory controls for large `n_persons`: person-axis chunking, memory
+  probing, and out-of-memory retry (`fit_with_oom_retry`).
+- Hyperparameter-optimization hooks for `bayesflow-hpo` (optional,
+  `bayesflow_irt.hpo`).
+- `scripts/train_irt.py` for config-driven training, and a minimal training
+  example (`examples/train_1pl_minimal.py`).

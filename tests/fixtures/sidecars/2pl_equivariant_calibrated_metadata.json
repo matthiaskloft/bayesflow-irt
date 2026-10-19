@@ -1,0 +1,96 @@
+{
+  "model_info": {
+    "model": "2PL",
+    "variant": "calibrated",
+    "version": "0.1.0"
+  },
+  "training_config": {
+    "priors": {
+      "a": {
+        "name": "lognormal",
+        "loc": 0.0,
+        "scale": 0.5
+      },
+      "b": {
+        "name": "normal",
+        "loc": 0.0,
+        "scale": 2.0
+      },
+      "theta": {
+        "name": "normal",
+        "loc": 0.0,
+        "scale": 1.0
+      }
+    },
+    "size_ranges": {
+      "n_items": [
+        5,
+        50
+      ],
+      "n_persons": [
+        10,
+        500
+      ]
+    },
+    "hparams": {
+      "base_checkpoint": "2pl_equivariant.keras",
+      "refine_epochs": 10,
+      "refine_batches_per_epoch": 20,
+      "effective_batch_size": 64
+    }
+  },
+  "phase2_metrics": {
+    "epochs": 8,
+    "per_epoch_metrics": [
+      {
+        "epoch": 1,
+        "loss": 2.0,
+        "val_loss": null
+      },
+      {
+        "epoch": 2,
+        "loss": 1.0,
+        "val_loss": null
+      },
+      {
+        "epoch": 3,
+        "loss": 0.6667,
+        "val_loss": null
+      },
+      {
+        "epoch": 4,
+        "loss": 0.5,
+        "val_loss": null
+      },
+      {
+        "epoch": 5,
+        "loss": 0.4,
+        "val_loss": null
+      },
+      {
+        "epoch": 6,
+        "loss": 0.3333,
+        "val_loss": null
+      },
+      {
+        "epoch": 7,
+        "loss": 0.2857,
+        "val_loss": null
+      },
+      {
+        "epoch": 8,
+        "loss": 0.25,
+        "val_loss": null
+      }
+    ]
+  },
+  "metadata_uuid": "00000000-0000-4000-8000-000000000002",
+  "provenance": {
+    "git_commit": "0000000000000000000000000000000000000000",
+    "timestamp": "2026-08-01T00:00:00+00:00",
+    "python_version": "3.11.9",
+    "keras_version": "3.12.1",
+    "bayesflow_version": "2.0.10",
+    "bayesflow_irt_version": "0.1.0"
+  }
+}

@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=77.0.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bayesflow-irt"
+version = "0.1.0"
+description = "BayesFlow add-on for Item Response Theory with many-to-many summary networks"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "bayesflow-irt contributors" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "bayesflow>=2.0.6",
+    "numpy>=1.24",
+    "keras>=3.0",
+    "scipy>=1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/matthiaskloft/bayesflow-irt"
+Repository = "https://github.com/matthiaskloft/bayesflow-irt"
+Issues = "https://github.com/matthiaskloft/bayesflow-irt/issues"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "matplotlib", "seaborn"]
+examples = ["matplotlib", "seaborn", "tqdm", "ipywidgets", "ipykernel"]
+calibration = ["bayesflow-calibration-loss>=0.2.0"]
+# 0.5.2+: provides `AggregationConfigError`, the metric-kind registry and the
+# checkpoint pool's `extra_metadata`.
+hpo = ["bayesflow-hpo>=0.5.2"]
+torch = ["torch>=2.0"]
+tensorflow = ["tensorflow>=2.16"]
+jax = ["jax>=0.4", "jaxlib>=0.4"]
+numba = ["numba>=0.59"]
+# Model-card figures (render_model_card); the Markdown is written without it.
+card = ["matplotlib>=3.7"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bayesflow_irt = ["_card_assets/*.js", "_card_assets/*.css"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: tests that fit BayesFlow approximators and are excluded from default runs",
+]
