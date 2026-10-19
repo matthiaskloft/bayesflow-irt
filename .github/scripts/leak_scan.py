@@ -2,7 +2,8 @@
 
 Scans only the lines a PR adds (``git diff base...HEAD``). Generic patterns
 live here; extra private terms come from the ``LEAK_TERMS`` environment
-variable (a regex, set from a repository secret) so they are not published.
+variable (a regex, set from a repository secret) so they are not published;
+the scan fails if it is unset, since fork PRs receive no secrets.
 
 Usage: python .github/scripts/leak_scan.py <base-ref>
 """
@@ -27,16 +28,27 @@ GENERIC = [
 SELF = ".github/scripts/leak_scan.py"
 
 
+def _diff_path(header: str) -> str | None:
+    """Return the new-file path of a ``+++`` header, decoding Git's C quoting."""
+    if header.startswith('"') and header.endswith('"'):
+        raw = header[1:-1].encode("latin-1", "backslashreplace")
+        header = raw.decode("unicode_escape").encode("latin-1").decode("utf-8")
+    return header[2:] if header.startswith("b/") else None
+
+
 def main() -> int:
     base = sys.argv[1]
     patterns = list(GENERIC)
     extra = os.environ.get("LEAK_TERMS", "").strip()
-    if extra:
-        patterns.append(extra)
+    if not extra:
+        print("LEAK_TERMS is not set: the private-term check could not run.")
+        return 1
+    patterns.append(extra)
     regex = re.compile("|".join(f"(?:{p})" for p in patterns), re.IGNORECASE)
 
     diff = subprocess.run(
-        ["git", "diff", "--unified=0", f"{base}...HEAD"],
+        ["git", "-c", "core.quotePath=false", "diff", "--unified=0",
+         f"{base}...HEAD"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         check=True,
     ).stdout
@@ -44,7 +56,7 @@ def main() -> int:
     hits, path, line_no = [], None, 0
     for line in diff.splitlines():
         if line.startswith("+++ "):
-            path = line[6:] if line.startswith("+++ b/") else None
+            path = _diff_path(line[4:])
         elif line.startswith("@@"):
             line_no = int(re.search(r"\+(\d+)", line).group(1))
         elif line.startswith("+") and path and path != SELF:
