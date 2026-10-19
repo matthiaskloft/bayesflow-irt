@@ -11,6 +11,9 @@ import keras.ops as ops
 
 from .approximators import EquivariantIRTApproximator
 
+_CALIBRATION_LOSS_IMPORT_ERROR: ImportError | None
+_CalibrationMixinBase: type
+
 try:
     from bayesflow_calibration_loss.mixin import CalibrationMixin
 except ImportError as exc:  # pragma: no cover - import-guard path

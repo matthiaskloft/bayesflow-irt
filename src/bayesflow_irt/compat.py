@@ -499,6 +499,7 @@ def apply_checkpoint_size_moments(
         trained_at = trained_at.replace(tzinfo=SIZE_MOMENTS_CHANGED_AT.tzinfo)
     if mode == "current":
         return "current code"
+    moments: dict[str, list[float]] | None
     if mode == "legacy":
         moments = legacy_size_moments(simulator)
         label = "legacy size moments (forced)"

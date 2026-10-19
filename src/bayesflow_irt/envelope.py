@@ -322,7 +322,7 @@ def check_data(
     if any(v is None for v in sizes.values()):
         raise TypeError("Provide responses, or both n_persons and n_items.")
     for axis, value in sizes.items():
-        if int(value) != value or value < 1:
+        if value is None or int(value) != value or value < 1:
             raise DataContractError(
                 f"{axis} must be a positive integer; got {value!r}."
             )

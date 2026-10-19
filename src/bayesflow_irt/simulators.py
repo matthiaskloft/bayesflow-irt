@@ -25,7 +25,13 @@ from bayesflow.simulators import Simulator
 from bayesflow.utils.decorators import allow_batch_size
 from scipy.special import expit as _sigmoid
 
-from .priors import Prior, PriorSpec, make_incremental_prior, resolve_prior
+from .priors import (
+    ParameterRole,
+    Prior,
+    PriorSpec,
+    make_incremental_prior,
+    resolve_prior,
+)
 
 try:
     from ._numba_kernels import binary_response_kernel, categorical_response_kernel
@@ -78,7 +84,7 @@ def _validate_variable_range(name: str, spec: tuple[int, int]) -> tuple[int, int
     return lo, hi
 
 
-def _resolve_named_prior(spec: PriorSpec, name: str) -> Callable:
+def _resolve_named_prior(spec: PriorSpec, name: ParameterRole) -> Callable:
     """Resolve a prior spec, prefixing errors with the parameter name."""
     try:
         return resolve_prior(spec, name)
@@ -317,7 +323,8 @@ def describe_size_sampling(simulator: Any) -> dict[str, Any]:
     axes = (("n_items", "item_bucket"), ("n_persons", "person_bucket"))
     rules = set()
     for key, bucket_attr in axes:
-        value_range = tuple(int(v) for v in getattr(simulator, key))
+        low, high = (int(v) for v in getattr(simulator, key))
+        value_range = (low, high)
         bucket = getattr(simulator, bucket_attr, None)
         values, probs = _size_distribution(value_range, bucket, distribution, share)
         rules.add("log_spaced_buckets" if bucket is not None else distribution)

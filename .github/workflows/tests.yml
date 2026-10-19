@@ -54,8 +54,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install tools
+        run: pip install ruff mypy
 
       - name: Ruff lint
         run: ruff check .
+
+      - name: Mypy
+        run: mypy

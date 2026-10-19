@@ -365,7 +365,7 @@ def _auto_chunk_size(
     import torch
 
     sizes = sorted({min(k, n) for k in PROBE_DATASETS})
-    peaks = []
+    peaks: list = []
     for k in sizes:
         safe_empty_cache()
         base = torch.cuda.memory_allocated()
