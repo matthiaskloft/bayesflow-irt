@@ -842,9 +842,10 @@
     const lower = xs.map((_, k) => at(k)[0] ?? null), upper = xs.map((_, k) => at(k).slice(-1)[0] ?? null);
     const W = 300, H = 190, L = 42, B = 30, T = 18, R = 8;
     // One scale for both reference rules, so their panels compare by eye.
-    const vals = [];
+    const vals = [], shownOut = new Set(outKeys());
     for (const c of D.cells) {
-      if (c.failed || !(c.cell.in_range || c.cell.n_items + "x" + c.cell.n_persons === sel?.key)) continue;
+      const key = c.cell.n_items + "x" + c.cell.n_persons;
+      if (c.failed || !(c.cell.in_range || key === sel?.key || shownOut.has(key))) continue;
       for (const t of Object.values((c.joint || {}).tarp || {})) t.expected_coverage.forEach((v, k) => {
         if (v === null) return;
         const se = t.expected_coverage_se[k] || 0;

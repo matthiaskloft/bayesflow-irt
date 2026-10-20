@@ -20,6 +20,7 @@ import json
 import math
 import platform
 import subprocess
+import sys
 import uuid
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
@@ -283,14 +284,15 @@ def _cpu_model() -> str:
                 return line.split(":", 1)[1].strip()
     except OSError:
         pass
-    try:
+    if sys.platform == "win32":
         import winreg
 
         key = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key) as k:
-            return str(winreg.QueryValueEx(k, "ProcessorNameString")[0]).strip()
-    except (ImportError, OSError):
-        pass
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key) as k:
+                return str(winreg.QueryValueEx(k, "ProcessorNameString")[0]).strip()
+        except OSError:
+            pass
     return platform.processor() or platform.machine() or "unknown"
 
 
