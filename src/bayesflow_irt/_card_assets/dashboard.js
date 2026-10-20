@@ -238,10 +238,32 @@
           ...ms.flatMap(m => { const v = c.failed ? null : value(c, m); return v ? [csvCell(v.v), csvCell(v.se)] : ["", ""]; }),
           ...refCols.flatMap(rc => { const v = refAt(c, rc); return v ? [csvCell(v[0]), csvCell(v[1])] : ["", ""]; })].join(","));
       }
-      const done = t => { status.textContent = t; };
-      try { navigator.clipboard.writeText(lines.join("\n") + "\n").then(() => done("Copied."), () => done("Copy failed.")); }
-      catch (e) { done("Copy failed."); }
+      const csv = lines.join("\n") + "\n";
+      const done = t => { status.textContent = t; fallback.replaceChildren(); };
+      // Embedded viewers and file:// pages often deny the clipboard API; try
+      // the older copy command, then show the CSV to select or download.
+      const legacy = () => {
+        const ta = el("textarea", { readonly: "", style: "position:fixed;opacity:0" });
+        ta.value = csv;
+        document.body.append(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+        ta.remove();
+        if (ok) { done("Copied."); return; }
+        status.textContent = "The browser blocked the clipboard; select the text or download it.";
+        const box = el("textarea", { readonly: "", rows: "6", class: "csv-fallback" });
+        box.value = csv;
+        const link = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: "model_card_cells.csv", text: "Download CSV" });
+        fallback.replaceChildren(box, link);
+        box.select();
+      };
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("no clipboard API");
+        navigator.clipboard.writeText(csv).then(() => done("Copied."), legacy);
+      } catch (e) { legacy(); }
     });
+    const fallback = el("div", { class: "noprint" });
     function draw() {
       body.replaceChildren(table(["Items", "Persons", "Range", ...ms.map(m => m.label), ...refCols.map(({ r, m }) => `${r.name}: ${m.label}`)], shown().map(c => [
         c.cell.n_items, c.cell.n_persons, c.cell.in_range ? "trained" : "extrapolation",
@@ -256,7 +278,7 @@
     onRedraw.push(draw);
     draw();
     return el("details", { class: "cell-table" }, [el("summary", { text: "Table: all cells, value (MCSE)" }),
-      el("div", { class: "table-actions" }, [copy, status]), body]);
+      el("div", { class: "table-actions" }, [copy, status]), fallback, body]);
   }
 
   // ---- Cell panel -----------------------------------------------------------
@@ -646,7 +668,7 @@
       if (axis === "calibration") {
         const curves = coverageCurves(p, c.cell.n_items + "x" + c.cell.n_persons);
         if (curves) plots.append(el("figure", { class: "fig" }, [curves, el("figcaption", { class: "guide",
-          text: "Grey: every in-range cell; shaded: lowest to highest; bold: median; coloured: this cell, bars ±2 MCSE. Dashed: nominal; orange: maximum (coverage 1), shown where it fits the axis." })]));
+          text: "Central-interval coverage minus nominal, at the levels the calibration error averages over. Grey: every in-range cell; shaded: lowest to highest; bold: median; coloured: this cell, bars ±2 MCSE. Dashed: nominal; orange: maximum (coverage 1), shown where it fits the axis. Coverage misses a posterior shifted to one side: the two tails cancel. The SBC ECDF difference shows it." })]));
         if (g.sbc_ecdf) {
           const b = D.band;
           const lo = b.lower.map((v, k) => v - b.grid[k]), hi = b.upper.map((v, k) => v - b.grid[k]);
@@ -661,19 +683,6 @@
             { kind: "line", y: dev },
           ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: r === 0.05 ? [-0.05, -0.025, 0, 0.025, 0.05] : roundTicks(-r, r, 5), xl: "rank fraction (band: 95% simultaneous)" }));
         }
-        // Coverage minus level at the 20 levels the calibration error
-        // averages over (records without it have none).
-        if (g.calibration_curve) {
-          const cc = g.calibration_curve;
-          const d = cc.coverage.map((v, k) => v - cc.levels[k]);
-          const lo = d.map((v, k) => v - 2 * cc.mcse[k]), hi = d.map((v, k) => v + 2 * cc.mcse[k]);
-          const yr = symRange([...lo, ...hi], 0.01);
-          plots.append(el("figure", { class: "fig" }, [plot(`${p}: coverage minus level`, cc.levels, [
-            { kind: "line", y: cc.levels.map(() => 0), dash: true },
-            { kind: "points", y: d, lo, hi },
-          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: roundTicks(yr[0], yr[1], 4), xl: "ETI level" }),
-          el("figcaption", { class: "guide", text: "The 20 levels the calibration error averages over (0.005–0.995). Bars: ±2 MCSE." })]));
-        }
       }
     };
   }
@@ -682,38 +691,48 @@
   // every cell as a faded line, the median across cells, the band from the
   // lowest to the highest cell, and the selected cell on top with ±2 MCSE.
   // A chosen cell outside the trained range is drawn against the in-range
-  // cells, which still set the grey lines, band and median.
+  // cells, which still set the grey lines, band and median. Uses the 20
+  // levels the calibration error averages over when every in-range cell
+  // records them, on a linear axis; otherwise the summary levels, evenly
+  // spaced.
   function coverageCurves(p, chosen) {
-    const lineOf = key => {
+    const statsOf = key => {
       const c = cells.get(key);
-      const g = c && !c.failed ? (p === "theta" ? (c.persons || {}).theta : (c.items || {})[p]) : null;
+      return c && !c.failed ? (p === "theta" ? (c.persons || {}).theta : (c.items || {})[p]) : null;
+    };
+    const inRange = D.axes.in_items.flatMap(i => D.axes.in_persons.map(n => i + "x" + n)).filter(k => statsOf(k));
+    if (!inRange.length) return null;
+    const dense = inRange.every(k => statsOf(k).calibration_curve);
+    const levels = dense ? statsOf(inRange[0]).calibration_curve.levels : D.levels;
+    const lineOf = key => {
+      const g = statsOf(key);
       if (!g) return null;
-      const y = D.levels.map(l => { const v = (g["coverage_" + l] || [null])[0]; return v === null ? null : v - l; });
-      const se = D.levels.map(l => (g["coverage_" + l] || [null, null])[1]);
+      const cc = g.calibration_curve;
+      if (dense) return cc ? { key, y: cc.coverage.map((v, k) => v === null ? null : v - levels[k]), se: cc.mcse } : null;
+      const y = levels.map(l => { const v = (g["coverage_" + l] || [null])[0]; return v === null ? null : v - l; });
+      const se = levels.map(l => (g["coverage_" + l] || [null, null])[1]);
       return { key, y, se };
     };
-    const lines = [];
-    for (const i of D.axes.in_items) for (const n of D.axes.in_persons) {
-      const d = lineOf(i + "x" + n);
-      if (d) lines.push(d);
-    }
-    if (!lines.length) return null;
+    const lines = inRange.map(lineOf);
     const sel = lines.find(d => d.key === chosen) || (chosen ? lineOf(chosen) : null);
     const at = k => lines.map(d => d.y[k]).filter(v => v !== null).sort((u, v) => u - v);
-    const median = D.levels.map((_, k) => { const v = at(k); return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null; });
-    const lower = D.levels.map((_, k) => at(k)[0] ?? null), upper = D.levels.map((_, k) => at(k).slice(-1)[0] ?? null);
+    const median = levels.map((_, k) => { const v = at(k); return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null; });
+    const lower = levels.map((_, k) => at(k)[0] ?? null), upper = levels.map((_, k) => at(k).slice(-1)[0] ?? null);
     const W = 300, H = 190, L = 42, B = 30, T = 18, R = 8;
     // Axis as the Overview rows: every cell's ±2 MCSE bar ends, times 1.2, so it
     // does not move when another cell is chosen; never above 0.5, the most
     // coverage can exceed a level (at 0.5), nor below -level (coverage 0).
     // An out-of-range cell widens the axis to fit itself.
     const vals = [...lines, ...(sel && !lines.includes(sel) ? [sel] : [])].flatMap(d => d.y.flatMap((v, k) => v === null ? [] : [v - 2 * (d.se[k] || 0), v + 2 * (d.se[k] || 0)]));
-    const lo = Math.max(-Math.max(...D.levels), Math.min(0, ...vals) * 1.2) || -0.05, hi = Math.min(0.5, Math.max(0, ...vals) * 1.2) || 0.05;
-    // Levels evenly spaced: the tail levels (0.99, 0.995) would overlap on a linear axis.
-    const xs = D.levels.map((_, k) => k), x0 = -0.3, x1 = D.levels.length - 0.7;
+    const lo = Math.max(-Math.max(...levels), Math.min(0, ...vals) * 1.2) || -0.05, hi = Math.min(0.5, Math.max(0, ...vals) * 1.2) || 0.05;
+    // The 20 levels are evenly spaced, so they sit on a linear axis; the
+    // summary levels are placed evenly, as their tail levels (0.99, 0.995)
+    // would overlap on a linear axis.
+    const xs = dense ? levels : levels.map((_, k) => k);
+    const x0 = dense ? 0 : -0.3, x1 = dense ? 1 : levels.length - 0.7;
     const X = x => L + (x - x0) / (x1 - x0) * (W - L - R), Y = y => T + (1 - (y - lo) / (hi - lo)) * (H - T - B);
     const clip = y => Math.min(hi, Math.max(lo, y));
-    const path = ys => xs.flatMap(k => ys[k] === null ? [] : [`${X(k)},${Y(clip(ys[k]))}`]).join(" ");
+    const path = ys => xs.flatMap((x, k) => ys[k] === null ? [] : [`${X(x)},${Y(clip(ys[k]))}`]).join(" ");
     const svg = sv("svg", { width: W, height: H, role: "img", "aria-label": `${p}: coverage minus nominal across in-range cells` });
     svg.append(sv("text", { x: L, y: 12, style: "font-weight:600" }, `${p}: coverage across cells`),
       sv("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "none", stroke: "var(--line)" }));
@@ -721,22 +740,23 @@
       if (t !== 0) svg.append(sv("line", { x1: L, x2: W - R, y1: Y(t), y2: Y(t), stroke: "var(--line)", "stroke-dasharray": "1 3" }));
       svg.append(sv("text", { x: L - 4, y: Y(t) + 4, "text-anchor": "end", class: "axis" }, String(t)));
     }
-    D.levels.forEach((l, k) => svg.append(sv("text", { x: X(k), y: H - B + 13, "text-anchor": "middle", class: "axis" }, String(l))));
+    const xTicks = dense ? [0, 0.25, 0.5, 0.75, 1].map(l => [l, l]) : levels.map((l, k) => [k, l]);
+    xTicks.forEach(([x, l]) => svg.append(sv("text", { x: X(x), y: H - B + 13, "text-anchor": "middle", class: "axis" }, String(l))));
     svg.append(sv("text", { x: (L + W) / 2, y: H - 3, "text-anchor": "middle", class: "axis" }, "nominal level"));
     svg.append(sv("polygon", { points: bandPoints(xs, X, y => Y(clip(y)), lower, upper), fill: "var(--muted)", opacity: "0.18" }));
     for (const d of lines) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3" }));
     svg.append(sv("line", { x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: "var(--muted)", "stroke-dasharray": "4 3" }));
     // Coverage cannot exceed 1: the maximum of coverage minus nominal.
-    svg.append(sv("polyline", { points: path(D.levels.map(l => 1 - l <= hi ? 1 - l : null)), fill: "none", stroke: "#D55E00", "stroke-width": "1.5" }));
+    svg.append(sv("polyline", { points: path(levels.map(l => 1 - l <= hi ? 1 - l : null)), fill: "none", stroke: "#D55E00", "stroke-width": "1.5" }));
     svg.append(sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "2" }));
     if (sel) {
       svg.append(sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "2" }));
-      xs.forEach(k => {
+      xs.forEach((x, k) => {
         if (sel.y[k] === null) return;
-        const se = sel.se[k];
-        if (se != null) svg.append(sv("line", { x1: X(k), x2: X(k), y1: Y(clip(sel.y[k] - 2 * se)), y2: Y(clip(sel.y[k] + 2 * se)), stroke: "var(--accent)" }));
-        svg.append(sv("circle", se != null ? { cx: X(k), cy: Y(clip(sel.y[k])), r: 3, fill: "var(--accent)" }
-          : { cx: X(k), cy: Y(clip(sel.y[k])), r: 3, fill: "var(--bg)", stroke: "var(--accent)", "stroke-width": "1.5" }));
+        const se = sel.se[k], r = dense ? 2 : 3;
+        if (se != null) svg.append(sv("line", { x1: X(x), x2: X(x), y1: Y(clip(sel.y[k] - 2 * se)), y2: Y(clip(sel.y[k] + 2 * se)), stroke: "var(--accent)" }));
+        svg.append(sv("circle", se != null ? { cx: X(x), cy: Y(clip(sel.y[k])), r, fill: "var(--accent)" }
+          : { cx: X(x), cy: Y(clip(sel.y[k])), r, fill: "var(--bg)", stroke: "var(--accent)", "stroke-width": "1.5" }));
       });
     }
     return svg;
