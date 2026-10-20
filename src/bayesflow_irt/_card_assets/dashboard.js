@@ -122,7 +122,10 @@
   let showOut = false;
   try { showOut = outCells.length > 0 && localStorage.getItem(OUT_KEY) === "1"; } catch (e) { /* no storage */ }
   const onRedraw = [];
-  side.append(el("div", { class: "side-title", text: D.title }));
+  // The card's name in the sidebar header, under a small "Model card" label.
+  const name = D.title.replace(/^Model card:\s*/, "");
+  side.append(el("div", { class: "side-title" }, [
+    el("div", { class: "side-kicker", text: "Model card" }), el("div", { class: "side-name", text: name })]));
   const panels = tabset(side, app, TABS, "Card pages", true, "");
   if (outCells.length) {
     const box = el("input", { type: "checkbox", id: "show-out" });
