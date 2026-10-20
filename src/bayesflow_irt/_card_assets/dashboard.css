@@ -36,7 +36,7 @@ h2 { font-size: 15px; margin: 32px 0 10px; }
 .subtabs [role=tab] { border-radius: 0; border-bottom: 2px solid transparent; }
 .subtabs [role=tab]:hover { background: none; }
 .subtabs [role=tab][aria-selected=true] { color: var(--fg); border-bottom-color: var(--accent); }
-[role=tabpanel] { padding: 4px 0 24px; }
+[role=tabpanel] { padding: 4px 0 24px; overflow-x: auto; }
 @media (max-width: 800px) {
   #app { grid-template-columns: minmax(0, 1fr); }
   .side { position: sticky; height: auto; padding: 6px 8px; z-index: 4;
@@ -54,7 +54,7 @@ th { background: var(--panel); font-weight: 600; }
 .note { border-left: 3px solid var(--accent); background: var(--panel); padding: 10px 14px; margin: 16px 0; border-radius: 0 6px 6px 0; }
 svg text { fill: var(--fg); font-size: 11px; }
 svg .axis { fill: var(--muted); }
-.legend { font-size: 12px; color: var(--muted); }
+.legend { font-size: 13px; color: var(--muted); }
 .section-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 button.link { border: 0; background: none; padding: 0; font: inherit; font-size: 13px;
   color: var(--accent); cursor: pointer; }
@@ -65,7 +65,8 @@ select, button.small { font: inherit; padding: 3px 6px; background: var(--bg);
   color: var(--fg); border: 1px solid var(--line); border-radius: 4px; }
 .panel { margin-top: 16px; padding: 10px 12px; background: var(--panel);
   border: 1px solid var(--line); border-radius: 6px; }
-.plots { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 20px 24px; margin: 8px 0 16px; }
+.plots { display: flex; flex-wrap: wrap; justify-content: safe center; align-items: flex-start; gap: 16px; margin: 8px 0 12px; max-width: 100%; overflow-x: auto; }
+.plots > * { flex-shrink: 0; }
 .small-n td { color: var(--muted); background: var(--grey); }
 pre { background: var(--panel); padding: 8px; overflow-x: auto; font-size: 13px; }
 img { max-width: 100%; background: #fff; }
@@ -81,7 +82,6 @@ img { max-width: 100%; background: #fff; }
 .ov-section { border-top: 1px solid var(--line); padding: 4px 0 8px; margin: 24px 0 0; }
 .ov-section > .section-head h2 { margin-top: 16px; }
 .ov-section h3 { margin-top: 16px; }
-.ov-section .plots { margin-bottom: 4px; }
 .items-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 4px; }
 .items-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
@@ -99,10 +99,12 @@ details > pre, details > ul { margin-top: 8px; }
 .tile-value { font-size: 15px; font-weight: 600; margin-top: 2px; }
 .tile-note { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .status { margin: 20px 0 8px; }
-.metric { width: 310px; max-width: 100%; }
-.metric .guide { font-size: 12px; margin: 4px 0 0; }
+.metric { width: 23.25rem; }
+.metric .guide { font-size: 13px; margin: 4px 0 0; }
 .pick { cursor: pointer; }
 svg[viewBox] { max-width: 100%; height: auto; }
+/* Keep plot labels readable under browser zoom; narrow areas can scroll. */
+svg[role=img] { max-width: none; flex-shrink: 0; }
 .tile { min-width: 0; }
 .cell-picker { display: grid; gap: 8px; margin: 16px 0 4px; }
 .pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -110,8 +112,8 @@ svg[viewBox] { max-width: 100%; height: auto; }
 .pill { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--panel);
   color: var(--fg); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .pill[aria-pressed=true] { border-color: var(--accent); background: var(--accent); color: var(--bg); }
-.fig { margin: 0; width: 300px; max-width: 100%; }
-.fig figcaption { font-size: 12px; margin: 4px 0 0; }
+.fig { margin: 0; width: 22.5rem; }
+.fig figcaption { font-size: 13px; margin: 4px 0 0; }
 /* iOS Safari enlarges text in some blocks on its own; keep sizes as set. */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .refs { margin-top: 40px; border-top: 1px solid var(--line); }
@@ -127,3 +129,5 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 @media (max-width: 800px) { .out-switch { margin: 6px 4px 0; } }
 /* Plots outside a .plots row are centred too. */
 svg[role=img], .fig, .metric, [role=tabpanel] img { display: block; margin-left: auto; margin-right: auto; }
+/* Centre the row as a group without distributing spare space between plots. */
+.plots > :is(svg[role=img], .fig, .metric) { margin-left: 0; margin-right: 0; }
