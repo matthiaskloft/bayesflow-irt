@@ -695,7 +695,7 @@
             if (svg) plots.append(svg);
           }
           if (plots.childNodes.length) box.append(el("p", { class: "guide",
-            text: "Expected coverage minus credibility level. Grey: every in-range cell; grey band: lowest to highest; bold: median; coloured: this cell, its ±2 SE band dash-edged. Dashed: nominal." }));
+            text: "Expected coverage minus credibility level. Grey: every in-range cell; grey band: lowest to highest; bold: median; coloured: this cell, its ±2 SE band dash-edged. Dashed: nominal." + (outKeys().length ? " Dashed grey: extrapolation cells, not in the median or band." : "") }));
         } else if (j.tcc) {
           plots.append(tccPlot(j.tcc));
         }
@@ -869,6 +869,7 @@
     svg.append(sv("text", { x: (L + W) / 2, y: H - 3, "text-anchor": "middle", class: "axis" }, "credibility level"));
     svg.append(sv("polygon", { points: area(lower, upper), fill: "var(--muted)", opacity: "0.18" }));
     for (const d of lines) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3" }));
+    for (const d of outKeys().map(lineOf).filter(Boolean)) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3", "stroke-dasharray": "4 3" }));
     svg.append(sv("line", { x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: "var(--muted)", "stroke-dasharray": "4 3" }),
       sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "1.25" }));
     if (sel) {

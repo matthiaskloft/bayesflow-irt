@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   does. The sidebar header is set apart from the page tabs.
 - Model card dashboard: with "Show extrapolation cells" on, the coverage and
   SBC ECDF plots add the out-of-range cells as dashed lines, outside the
-  median and shading. The across-cell line plots share one width and one
+  median and shading; so does the joint TARP plot. The across-cell line plots share one width and one
   set of line weights.
 - Model card dashboard: Recovery and Calibration keep the same parameter tab
   chosen, as they already did the cell.
