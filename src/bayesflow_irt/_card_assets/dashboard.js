@@ -70,6 +70,7 @@
     group("Model", [
       tile("Trained range", trained.replace(", ", " · ")),
       ...(validated ? [tile("Validated range", validated.replace(", ", " · "))] : []),
+      ...(outCells.length ? [tile("Extrapolation evaluated", outSizes(), `${outCells.length} cells, not a supported use`)] : []),
       tile("Checkpoint match", D.pill),
     ]),
     group("Evaluation", [
@@ -82,7 +83,9 @@
 
   // ---- Tabs ---------------------------------------------------------------
   // One ARIA tab set: the sidebar (vertical) for pages, a row inside a page.
-  function tabset(listHost, panelHost, defs, label, vertical, prefix) {
+  // onSelect(k), if given, is called when the viewer picks tab k; the
+  // returned object's non-enumerable select(k) switches tabs without it.
+  function tabset(listHost, panelHost, defs, label, vertical, prefix, onSelect) {
     const list = el("div", { role: "tablist", "aria-label": label,
       "aria-orientation": vertical ? "vertical" : "horizontal" });
     listHost.append(list);
@@ -93,11 +96,11 @@
         "aria-selected": k === 0 ? "true" : "false", tabindex: k === 0 ? "0" : "-1", text: name });
       const p = el("section", { role: "tabpanel", id: "tab-" + prefix + id, "aria-labelledby": "tabbtn-" + prefix + id });
       if (k) p.hidden = true;
-      t.addEventListener("click", () => select(k));
+      t.addEventListener("click", () => pick(k));
       t.addEventListener("keydown", e => {
         const n = defs.length;
         const to = { [next]: (k + 1) % n, [prev]: (k - 1 + n) % n, Home: 0, End: n - 1 }[e.key];
-        if (to !== undefined) { e.preventDefault(); select(to); tabs[to].focus(); }
+        if (to !== undefined) { e.preventDefault(); pick(to); tabs[to].focus(); }
       });
       tabs.push(t); list.append(t); panelHost.append(p); out[id] = p;
     });
@@ -109,6 +112,8 @@
       });
       if (vertical) window.scrollTo(0, 0);
     }
+    const pick = k => { select(k); if (onSelect) onSelect(k); };
+    Object.defineProperty(out, "select", { value: select });
     return out;
   }
   const TABS = [["overview", "Overview"], ["model", "Model"], ["recovery", "Recovery"],
@@ -122,7 +127,10 @@
   let showOut = false;
   try { showOut = outCells.length > 0 && localStorage.getItem(OUT_KEY) === "1"; } catch (e) { /* no storage */ }
   const onRedraw = [];
-  side.append(el("div", { class: "side-title", text: D.title }));
+  // The card's name in the sidebar header, under a small "Model card" label.
+  const name = D.title.replace(/^Model card:\s*/, "");
+  side.append(el("div", { class: "side-title" }, [
+    el("div", { class: "side-kicker", text: "Model card" }), el("div", { class: "side-name", text: name })]));
   const panels = tabset(side, app, TABS, "Card pages", true, "");
   if (outCells.length) {
     const box = el("input", { type: "checkbox", id: "show-out" });
@@ -138,11 +146,15 @@
     side.append(el("label", { class: "out-switch", for: "show-out" }, [box,
       el("span", { text: `Show extrapolation cells (${outCells.length})` })]));
   }
-  // Sections inside a page, as a row of tabs.
-  const sub = (page, defs) => {
+  // Sections inside a page, as a row of tabs. Pages given the same link list
+  // keep the same section chosen (the parameter on Recovery and Calibration).
+  const sub = (page, defs, link) => {
     const row = el("div", { class: "subtabs" });
     panels[page].append(row);
-    return tabset(row, panels[page], defs, "Sections", false, page + "-");
+    const set = tabset(row, panels[page], defs, "Sections", false, page + "-",
+      link && (k => link.forEach(s => { if (s !== set) s.select(k); })));
+    if (link) link.push(set);
+    return set;
   };
 
   // ---- Metric page ----------------------------------------------------------
@@ -238,10 +250,32 @@
           ...ms.flatMap(m => { const v = c.failed ? null : value(c, m); return v ? [csvCell(v.v), csvCell(v.se)] : ["", ""]; }),
           ...refCols.flatMap(rc => { const v = refAt(c, rc); return v ? [csvCell(v[0]), csvCell(v[1])] : ["", ""]; })].join(","));
       }
-      const done = t => { status.textContent = t; };
-      try { navigator.clipboard.writeText(lines.join("\n") + "\n").then(() => done("Copied."), () => done("Copy failed.")); }
-      catch (e) { done("Copy failed."); }
+      const csv = lines.join("\n") + "\n";
+      const done = t => { status.textContent = t; fallback.replaceChildren(); };
+      // Embedded viewers and file:// pages often deny the clipboard API; try
+      // the older copy command, then show the CSV to select or download.
+      const legacy = () => {
+        const ta = el("textarea", { readonly: "", style: "position:fixed;opacity:0" });
+        ta.value = csv;
+        document.body.append(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+        ta.remove();
+        if (ok) { done("Copied."); return; }
+        status.textContent = "The browser blocked the clipboard; select the text or download it.";
+        const box = el("textarea", { readonly: "", rows: "6", class: "csv-fallback" });
+        box.value = csv;
+        const link = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: "model_card_cells.csv", text: "Download CSV" });
+        fallback.replaceChildren(box, link);
+        box.select();
+      };
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("no clipboard API");
+        navigator.clipboard.writeText(csv).then(() => done("Copied."), legacy);
+      } catch (e) { legacy(); }
     });
+    const fallback = el("div", { class: "noprint" });
     function draw() {
       body.replaceChildren(table(["Items", "Persons", "Range", ...ms.map(m => m.label), ...refCols.map(({ r, m }) => `${r.name}: ${m.label}`)], shown().map(c => [
         c.cell.n_items, c.cell.n_persons, c.cell.in_range ? "trained" : "extrapolation",
@@ -256,7 +290,7 @@
     onRedraw.push(draw);
     draw();
     return el("details", { class: "cell-table" }, [el("summary", { text: "Table: all cells, value (MCSE)" }),
-      el("div", { class: "table-actions" }, [copy, status]), body]);
+      el("div", { class: "table-actions" }, [copy, status]), fallback, body]);
   }
 
   // ---- Cell panel -----------------------------------------------------------
@@ -268,8 +302,8 @@
     return ok.map(k => `${X(xs[k])},${Y(hi[k])}`).concat(ok.slice().reverse().map(k => `${X(xs[k])},${Y(lo[k])}`)).join(" ");
   }
   function plot(title, xs, series, opts) {
-    // series: [{y, lo?, hi?, kind: "line"|"points"|"band", dash?}]
-    const W = 260, H = 190, L = 42, B = 30, T = 18, R = 8;
+    // series: [{y, lo?, hi?, kind: "line"|"points"|"band", dash?, faint?, bold?}]
+    const W = opts.w || 260, H = 190, L = 42, B = 30, T = 18, R = 8;
     const [x0, x1] = opts.x, [y0, y1] = opts.y;
     const X = x => L + (x - x0) / (x1 - x0) * (W - L - R), Y = y => T + (1 - (y - y0) / (y1 - y0)) * (H - T - B);
     const svg = sv("svg", { width: W, height: H, role: "img", "aria-label": title });
@@ -293,7 +327,8 @@
       } else if (s.kind === "line") {
         // A missing value (null) is left out, not drawn as zero.
         svg.append(sv("polyline", { points: xs.flatMap((x, k) => s.y[k] === null || !isFinite(s.y[k]) ? [] : [`${X(x)},${Y(clip(s.y[k]))}`]).join(" "),
-          fill: "none", stroke: s.dash ? "var(--muted)" : "var(--accent)", "stroke-dasharray": s.dash ? "4 3" : "none", "stroke-width": "1.5" }));
+          fill: "none", stroke: s.dash || s.faint ? "var(--muted)" : s.bold ? "var(--fg)" : "var(--accent)", "stroke-dasharray": s.dash ? "4 3" : "none",
+          "stroke-width": s.faint ? "1" : s.bold ? "1.25" : "1.5", opacity: s.faint ? "0.3" : "1" }));
       } else {
         xs.forEach((x, k) => {
           if (s.y[k] === null) return;
@@ -318,6 +353,17 @@
     items: D.axes.items.filter(i => D.cells.some(c => c.cell.n_items === i)),
     persons: D.axes.persons.filter(n => D.cells.some(c => c.cell.n_persons === n)) };
   const axes = () => showOut ? ALL_AXES : IN_AXES;
+  // Cells outside the trained range that the line plots add (switch on), as
+  // dashed lines that leave the in-range median and band unchanged.
+  // The sizes outside the trained range among the evaluated cells, e.g.
+  // "items 3 · persons 1000".
+  const outSizes = () => {
+    const uniq = a => [...new Set(a)].sort((u, v) => u - v).join(", ");
+    const it = uniq(outCells.map(c => c.cell.n_items).filter(i => !D.axes.in_items.includes(i)));
+    const pe = uniq(outCells.map(c => c.cell.n_persons).filter(n => !D.axes.in_persons.includes(n)));
+    return [it && "items " + it, pe && "persons " + pe].filter(Boolean).join(" · ");
+  };
+  const outKeys = () => showOut ? outCells.filter(c => !c.failed).map(c => c.cell.n_items + "x" + c.cell.n_persons) : [];
   const EXTRAP_GUIDE = "Squares: cells outside the trained range (extrapolation; the network was not trained on them, so they show how far it carries over, not a supported use); dashed lines: the trained range's person bounds; ";
   function cellPoints(m, ax = IN_AXES) {
     const pts = [];
@@ -484,7 +530,7 @@
   // card's evaluation grid as crosses. Shade: square root of the share of
   // the largest bin, so the long tail stays visible.
   function sizeMap(m) {
-    const W = 560, H = 330, L = 44, R = 96, T = 24, B = 38;
+    const W = 572, H = 330, L = 44, R = 108, T = 24, B = 38;
     const ie = m.items.edges, pe = m.persons.edges;
     // The axes also reach grid cells outside the trained range (left blank).
     const lx = Math.log, pad = 0.12;
@@ -513,13 +559,23 @@
     for (const i of m.grid.items) {
       svg.append(sv("text", { x: L - 5, y: Y(i) + 4, "text-anchor": "end", class: "axis" }, String(i)));
     }
-    svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "persons"),
+    svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "persons (log scale)"),
       sv("text", { x: 12, y: (T + H - B) / 2, "text-anchor": "middle", class: "axis",
-        transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "items"));
+        transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "items (log scale)"));
+    // Card grid sizes: a cross where evaluated, inside a square outside the
+    // trained range (as the plots mark extrapolation); a faint ring where the
+    // size was not evaluated or failed.
+    const extrap = new Set(outCells.filter(c => !c.failed).map(c => c.cell.n_items + "x" + c.cell.n_persons));
+    const box = (cx, cy) => sv("rect", { x: cx - 5.5, y: cy - 5.5, width: 11, height: 11, fill: "none", stroke: "var(--fg)", "stroke-width": "1.1" });
+    const cross = (cx, cy) => sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
+      stroke: "var(--fg)", "stroke-width": "1.3" });
+    const ring = (cx, cy) => sv("circle", { cx, cy, r: 3, fill: "none", stroke: "var(--muted)", "stroke-width": "1.1" });
+    let skipped = 0;
     for (const p of m.grid.persons) for (const i of m.grid.items) {
-      const cx = X(p), cy = Y(i);
-      svg.append(sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
-        stroke: "var(--fg)", "stroke-width": "1.3" }));
+      const cx = X(p), cy = Y(i), c = cells.get(i + "x" + p);
+      if (!c || c.failed) { svg.append(ring(cx, cy)); skipped++; continue; }
+      svg.append(cross(cx, cy));
+      if (extrap.has(i + "x" + p)) svg.append(box(cx, cy));
     }
     // Legend: shade scale and the grid marker.
     const lx0 = W - R + 18, ly0 = T + 8, lh = 120;
@@ -530,8 +586,13 @@
     svg.append(sv("text", { x: lx0 + 16, y: ly0 + 8, class: "axis" }, pmax.toPrecision(2)),
       sv("text", { x: lx0 + 16, y: ly0 + lh, class: "axis" }, "0"),
       sv("text", { x: lx0, y: ly0 + lh + 16, class: "axis" }, "per size pair"),
-      sv("path", { d: `M${lx0 + 3},${ly0 + lh + 31}l6,6m-6,0l6,-6`, stroke: "var(--fg)", "stroke-width": "1.3" }),
-      sv("text", { x: lx0 + 16, y: ly0 + lh + 38, class: "axis" }, "card grid"));
+      cross(lx0 + 6, ly0 + lh + 34), sv("text", { x: lx0 + 16, y: ly0 + lh + 38, class: "axis" }, "evaluated"));
+    let ly = ly0 + lh + 52;
+    if (extrap.size) {
+      svg.append(cross(lx0 + 6, ly), box(lx0 + 6, ly), sv("text", { x: lx0 + 16, y: ly + 4, class: "axis" }, "extrapolation"));
+      ly += 18;
+    }
+    if (skipped) svg.append(ring(lx0 + 6, ly), sv("text", { x: lx0 + 16, y: ly + 4, class: "axis" }, "not evaluated"));
     return svg;
   }
 
@@ -634,7 +695,7 @@
             if (svg) plots.append(svg);
           }
           if (plots.childNodes.length) box.append(el("p", { class: "guide",
-            text: "Expected coverage minus credibility level. Grey: every in-range cell; grey band: lowest to highest; bold: median; coloured: this cell, its ±2 SE band dash-edged. Dashed: nominal." }));
+            text: "Expected coverage minus credibility level. Grey: every in-range cell; grey band: lowest to highest; bold: median; coloured: this cell, its ±2 SE band dash-edged. Dashed: nominal." + (outKeys().length ? " Dashed grey: extrapolation cells, not in the median or band." : "") }));
         } else if (j.tcc) {
           plots.append(tccPlot(j.tcc));
         }
@@ -646,33 +707,37 @@
       if (axis === "calibration") {
         const curves = coverageCurves(p, c.cell.n_items + "x" + c.cell.n_persons);
         if (curves) plots.append(el("figure", { class: "fig" }, [curves, el("figcaption", { class: "guide",
-          text: "Grey: every in-range cell; shaded: lowest to highest; bold: median; coloured: this cell, bars ±2 MCSE. Dashed: nominal; orange: maximum (coverage 1), shown where it fits the axis." })]));
+          text: "Central-interval coverage minus nominal, at the levels the calibration error averages over. Grey: every in-range cell; shaded: lowest to highest; black (white in dark mode): their median; coloured: this cell, bars ±2 MCSE. Dashed: nominal; orange: maximum (coverage 1), shown where it fits the axis. Coverage misses a posterior shifted to one side: the two tails cancel. The SBC ECDF difference shows it." + (outKeys().length ? " Dashed grey: extrapolation cells, not in the median or the shading." : "") })]));
         if (g.sbc_ecdf) {
           const b = D.band;
           const lo = b.lower.map((v, k) => v - b.grid[k]), hi = b.upper.map((v, k) => v - b.grid[k]);
-          const dev = g.sbc_ecdf.map((v, k) => v === null ? null : v - b.grid[k]);
-          // The axis is pinned at ±0.05 and widens only when the band or the
-          // deviation reaches past it (to 1.2 times the farthest value).
-          const far = Math.max(...[...lo, ...hi, ...dev].filter(v => v !== null && isFinite(v)).map(Math.abs));
+          const devOf = s => s.sbc_ecdf.map((v, k) => v === null ? null : v - b.grid[k]);
+          const dev = devOf(g);
+          // Every in-range cell faded behind this one, with their median, as
+          // in the coverage plot.
+          const others = D.axes.in_items.flatMap(i => D.axes.in_persons.map(n => cells.get(i + "x" + n)))
+            .map(o => o && !o.failed ? (p === "theta" ? (o.persons || {}).theta : (o.items || {})[p]) : null)
+            .filter(s => s && s.sbc_ecdf).map(devOf);
+          const outside = outKeys().map(k => cells.get(k)).map(o => p === "theta" ? (o.persons || {}).theta : (o.items || {})[p])
+            .filter(s => s && s.sbc_ecdf).map(devOf);
+          const median = b.grid.map((_, k) => {
+            const v = others.map(d => d[k]).filter(x => x !== null).sort((u, w) => u - w);
+            return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null;
+          });
+          // The axis is pinned at ±0.05 and widens only when the band or a
+          // deviation reaches past it (to 1.2 times the farthest value); the
+          // other cells count, so it does not move when another cell is chosen.
+          const far = Math.max(...[...lo, ...hi, ...dev, ...others.flat(), ...outside.flat()].filter(v => v !== null && isFinite(v)).map(Math.abs));
           const r = far > 0.05 ? far * 1.2 : 0.05, yr = [-r, r];
-          plots.append(plot(`${p}: SBC ECDF difference`, b.grid, [
+          plots.append(el("figure", { class: "fig" }, [plot(`${p}: SBC ECDF difference`, b.grid, [
             { kind: "band", step: true, lo, hi },
+            ...others.map(y => ({ kind: "line", y, faint: true })),
+            ...outside.map(y => ({ kind: "line", y, faint: true, dash: true })),
             { kind: "line", y: b.grid.map(() => 0), dash: true },
+            ...(others.length > 1 ? [{ kind: "line", y: median, bold: true }] : []),
             { kind: "line", y: dev },
-          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: r === 0.05 ? [-0.05, -0.025, 0, 0.025, 0.05] : roundTicks(-r, r, 5), xl: "rank fraction (band: 95% simultaneous)" }));
-        }
-        // Coverage minus level at the 20 levels the calibration error
-        // averages over (records without it have none).
-        if (g.calibration_curve) {
-          const cc = g.calibration_curve;
-          const d = cc.coverage.map((v, k) => v - cc.levels[k]);
-          const lo = d.map((v, k) => v - 2 * cc.mcse[k]), hi = d.map((v, k) => v + 2 * cc.mcse[k]);
-          const yr = symRange([...lo, ...hi], 0.01);
-          plots.append(el("figure", { class: "fig" }, [plot(`${p}: coverage minus level`, cc.levels, [
-            { kind: "line", y: cc.levels.map(() => 0), dash: true },
-            { kind: "points", y: d, lo, hi },
-          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: roundTicks(yr[0], yr[1], 4), xl: "ETI level" }),
-          el("figcaption", { class: "guide", text: "The 20 levels the calibration error averages over (0.005–0.995). Bars: ±2 MCSE." })]));
+          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: r === 0.05 ? [-0.05, -0.025, 0, 0.025, 0.05] : roundTicks(-r, r, 5), xl: "rank fraction (band: 95% simultaneous)", w: 300 }),
+          el("figcaption", { class: "guide", text: "ECDF of the posterior ranks minus uniform. Grey: every in-range cell; black (white in dark mode): their median; coloured: this cell. Shaded: 95% simultaneous band for one cell, so across many cells a few grey lines leaving it are expected by chance." + (outside.length ? " Dashed grey: extrapolation cells, not in the median." : "") })]));
         }
       }
     };
@@ -682,38 +747,49 @@
   // every cell as a faded line, the median across cells, the band from the
   // lowest to the highest cell, and the selected cell on top with ±2 MCSE.
   // A chosen cell outside the trained range is drawn against the in-range
-  // cells, which still set the grey lines, band and median.
+  // cells, which still set the grey lines, band and median. Uses the 20
+  // levels the calibration error averages over when every in-range cell
+  // records them, on a linear axis; otherwise the summary levels, evenly
+  // spaced.
   function coverageCurves(p, chosen) {
-    const lineOf = key => {
+    const statsOf = key => {
       const c = cells.get(key);
-      const g = c && !c.failed ? (p === "theta" ? (c.persons || {}).theta : (c.items || {})[p]) : null;
+      return c && !c.failed ? (p === "theta" ? (c.persons || {}).theta : (c.items || {})[p]) : null;
+    };
+    const inRange = D.axes.in_items.flatMap(i => D.axes.in_persons.map(n => i + "x" + n)).filter(k => statsOf(k));
+    if (!inRange.length) return null;
+    const dense = inRange.every(k => statsOf(k).calibration_curve);
+    const levels = dense ? statsOf(inRange[0]).calibration_curve.levels : D.levels;
+    const lineOf = key => {
+      const g = statsOf(key);
       if (!g) return null;
-      const y = D.levels.map(l => { const v = (g["coverage_" + l] || [null])[0]; return v === null ? null : v - l; });
-      const se = D.levels.map(l => (g["coverage_" + l] || [null, null])[1]);
+      const cc = g.calibration_curve;
+      if (dense) return cc ? { key, y: cc.coverage.map((v, k) => v === null ? null : v - levels[k]), se: cc.mcse } : null;
+      const y = levels.map(l => { const v = (g["coverage_" + l] || [null])[0]; return v === null ? null : v - l; });
+      const se = levels.map(l => (g["coverage_" + l] || [null, null])[1]);
       return { key, y, se };
     };
-    const lines = [];
-    for (const i of D.axes.in_items) for (const n of D.axes.in_persons) {
-      const d = lineOf(i + "x" + n);
-      if (d) lines.push(d);
-    }
-    if (!lines.length) return null;
+    const lines = inRange.map(lineOf);
+    const outside = outKeys().map(lineOf).filter(Boolean);
     const sel = lines.find(d => d.key === chosen) || (chosen ? lineOf(chosen) : null);
     const at = k => lines.map(d => d.y[k]).filter(v => v !== null).sort((u, v) => u - v);
-    const median = D.levels.map((_, k) => { const v = at(k); return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null; });
-    const lower = D.levels.map((_, k) => at(k)[0] ?? null), upper = D.levels.map((_, k) => at(k).slice(-1)[0] ?? null);
+    const median = levels.map((_, k) => { const v = at(k); return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null; });
+    const lower = levels.map((_, k) => at(k)[0] ?? null), upper = levels.map((_, k) => at(k).slice(-1)[0] ?? null);
     const W = 300, H = 190, L = 42, B = 30, T = 18, R = 8;
     // Axis as the Overview rows: every cell's ±2 MCSE bar ends, times 1.2, so it
     // does not move when another cell is chosen; never above 0.5, the most
     // coverage can exceed a level (at 0.5), nor below -level (coverage 0).
     // An out-of-range cell widens the axis to fit itself.
-    const vals = [...lines, ...(sel && !lines.includes(sel) ? [sel] : [])].flatMap(d => d.y.flatMap((v, k) => v === null ? [] : [v - 2 * (d.se[k] || 0), v + 2 * (d.se[k] || 0)]));
-    const lo = Math.max(-Math.max(...D.levels), Math.min(0, ...vals) * 1.2) || -0.05, hi = Math.min(0.5, Math.max(0, ...vals) * 1.2) || 0.05;
-    // Levels evenly spaced: the tail levels (0.99, 0.995) would overlap on a linear axis.
-    const xs = D.levels.map((_, k) => k), x0 = -0.3, x1 = D.levels.length - 0.7;
+    const vals = [...lines, ...outside, ...(sel && !lines.includes(sel) ? [sel] : [])].flatMap(d => d.y.flatMap((v, k) => v === null ? [] : [v - 2 * (d.se[k] || 0), v + 2 * (d.se[k] || 0)]));
+    const lo = Math.max(-Math.max(...levels), Math.min(0, ...vals) * 1.2) || -0.05, hi = Math.min(0.5, Math.max(0, ...vals) * 1.2) || 0.05;
+    // The 20 levels are evenly spaced, so they sit on a linear axis; the
+    // summary levels are placed evenly, as their tail levels (0.99, 0.995)
+    // would overlap on a linear axis.
+    const xs = dense ? levels : levels.map((_, k) => k);
+    const x0 = dense ? 0 : -0.3, x1 = dense ? 1 : levels.length - 0.7;
     const X = x => L + (x - x0) / (x1 - x0) * (W - L - R), Y = y => T + (1 - (y - lo) / (hi - lo)) * (H - T - B);
     const clip = y => Math.min(hi, Math.max(lo, y));
-    const path = ys => xs.flatMap(k => ys[k] === null ? [] : [`${X(k)},${Y(clip(ys[k]))}`]).join(" ");
+    const path = ys => xs.flatMap((x, k) => ys[k] === null ? [] : [`${X(x)},${Y(clip(ys[k]))}`]).join(" ");
     const svg = sv("svg", { width: W, height: H, role: "img", "aria-label": `${p}: coverage minus nominal across in-range cells` });
     svg.append(sv("text", { x: L, y: 12, style: "font-weight:600" }, `${p}: coverage across cells`),
       sv("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "none", stroke: "var(--line)" }));
@@ -721,22 +797,24 @@
       if (t !== 0) svg.append(sv("line", { x1: L, x2: W - R, y1: Y(t), y2: Y(t), stroke: "var(--line)", "stroke-dasharray": "1 3" }));
       svg.append(sv("text", { x: L - 4, y: Y(t) + 4, "text-anchor": "end", class: "axis" }, String(t)));
     }
-    D.levels.forEach((l, k) => svg.append(sv("text", { x: X(k), y: H - B + 13, "text-anchor": "middle", class: "axis" }, String(l))));
+    const xTicks = dense ? [0, 0.25, 0.5, 0.75, 1].map(l => [l, l]) : levels.map((l, k) => [k, l]);
+    xTicks.forEach(([x, l]) => svg.append(sv("text", { x: X(x), y: H - B + 13, "text-anchor": "middle", class: "axis" }, String(l))));
     svg.append(sv("text", { x: (L + W) / 2, y: H - 3, "text-anchor": "middle", class: "axis" }, "nominal level"));
     svg.append(sv("polygon", { points: bandPoints(xs, X, y => Y(clip(y)), lower, upper), fill: "var(--muted)", opacity: "0.18" }));
     for (const d of lines) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3" }));
+    for (const d of outside) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3", "stroke-dasharray": "4 3" }));
     svg.append(sv("line", { x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: "var(--muted)", "stroke-dasharray": "4 3" }));
     // Coverage cannot exceed 1: the maximum of coverage minus nominal.
-    svg.append(sv("polyline", { points: path(D.levels.map(l => 1 - l <= hi ? 1 - l : null)), fill: "none", stroke: "#D55E00", "stroke-width": "1.5" }));
-    svg.append(sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "2" }));
+    svg.append(sv("polyline", { points: path(levels.map(l => 1 - l <= hi ? 1 - l : null)), fill: "none", stroke: "#D55E00", "stroke-width": "1.5" }));
+    svg.append(sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "1.25" }));
     if (sel) {
-      svg.append(sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "2" }));
-      xs.forEach(k => {
+      svg.append(sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "1.5" }));
+      xs.forEach((x, k) => {
         if (sel.y[k] === null) return;
-        const se = sel.se[k];
-        if (se != null) svg.append(sv("line", { x1: X(k), x2: X(k), y1: Y(clip(sel.y[k] - 2 * se)), y2: Y(clip(sel.y[k] + 2 * se)), stroke: "var(--accent)" }));
-        svg.append(sv("circle", se != null ? { cx: X(k), cy: Y(clip(sel.y[k])), r: 3, fill: "var(--accent)" }
-          : { cx: X(k), cy: Y(clip(sel.y[k])), r: 3, fill: "var(--bg)", stroke: "var(--accent)", "stroke-width": "1.5" }));
+        const se = sel.se[k], r = dense ? 2 : 3;
+        if (se != null) svg.append(sv("line", { x1: X(x), x2: X(x), y1: Y(clip(sel.y[k] - 2 * se)), y2: Y(clip(sel.y[k] + 2 * se)), stroke: "var(--accent)" }));
+        svg.append(sv("circle", se != null ? { cx: X(x), cy: Y(clip(sel.y[k])), r, fill: "var(--accent)" }
+          : { cx: X(x), cy: Y(clip(sel.y[k])), r, fill: "var(--bg)", stroke: "var(--accent)", "stroke-width": "1.5" }));
       });
     }
     return svg;
@@ -764,9 +842,10 @@
     const lower = xs.map((_, k) => at(k)[0] ?? null), upper = xs.map((_, k) => at(k).slice(-1)[0] ?? null);
     const W = 300, H = 190, L = 42, B = 30, T = 18, R = 8;
     // One scale for both reference rules, so their panels compare by eye.
-    const vals = [];
+    const vals = [], shownOut = new Set(outKeys());
     for (const c of D.cells) {
-      if (c.failed || !(c.cell.in_range || c.cell.n_items + "x" + c.cell.n_persons === sel?.key)) continue;
+      const key = c.cell.n_items + "x" + c.cell.n_persons;
+      if (c.failed || !(c.cell.in_range || key === sel?.key || shownOut.has(key))) continue;
       for (const t of Object.values((c.joint || {}).tarp || {})) t.expected_coverage.forEach((v, k) => {
         if (v === null) return;
         const se = t.expected_coverage_se[k] || 0;
@@ -791,15 +870,16 @@
     svg.append(sv("text", { x: (L + W) / 2, y: H - 3, "text-anchor": "middle", class: "axis" }, "credibility level"));
     svg.append(sv("polygon", { points: area(lower, upper), fill: "var(--muted)", opacity: "0.18" }));
     for (const d of lines) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3" }));
+    for (const d of outKeys().map(lineOf).filter(Boolean)) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3", "stroke-dasharray": "4 3" }));
     svg.append(sv("line", { x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: "var(--muted)", "stroke-dasharray": "4 3" }),
-      sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "2" }));
+      sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "1.25" }));
     if (sel) {
       const lo2 = sel.y.map((v, k) => v === null || sel.se[k] == null ? null : v - 2 * sel.se[k]),
         hi2 = sel.y.map((v, k) => v === null || sel.se[k] == null ? null : v + 2 * sel.se[k]);
       svg.append(sv("polygon", { points: area(lo2, hi2), fill: "var(--accent)", opacity: "0.35" }),
         sv("polyline", { points: path(lo2), fill: "none", stroke: "var(--accent)", "stroke-width": "1", "stroke-dasharray": "3 2" }),
         sv("polyline", { points: path(hi2), fill: "none", stroke: "var(--accent)", "stroke-width": "1", "stroke-dasharray": "3 2" }),
-        sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "2" }));
+        sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "1.5" }));
     }
     return svg;
   }
@@ -963,7 +1043,9 @@
   } else {
     md.irt.append(table(D.priors.length ? ["Parameter", "Distribution", "Hyperparameters"] : [""], D.priors));
   }
-  md.envelope.append(el("h2", { text: "Supported data" }), table(["", ""], D.envelope));
+  md.envelope.append(el("h2", { text: "Supported data" }), table(["", ""], [...D.envelope.slice(0, 2),
+    ...(outCells.length ? [["Evaluated outside the trained range", `${outSizes().replace(" · ", ", ")} (${outCells.length} cells, boxed on the map below): extrapolation, not a supported use`]] : []),
+    ...D.envelope.slice(2)]));
   if (D.trained_sizes) md.envelope.append(sizeMap(D.trained_sizes));
   // NPE architecture: every recorded setting, nested configs flattened to
   // dotted keys and grouped by network. HPO sidecars keep the settings in
@@ -995,7 +1077,12 @@
     for (const g of names) md.npe.append(el("h3", { text: g }), table(["Setting", "Value"], archGroups[g].sort((a, b) => a[0].localeCompare(b[0]))));
     md.npe.append(el("p", { class: "guide", text: "Settings as recorded in the metadata sidecar. Settings left at their library defaults are listed only if the training script recorded them." }));
   }
-  md.training.append(el("h2", { text: "Training" }), kv(D.training));
+  // The device as "GPU: <model>" or "CPU: <model>" (training_device()); older
+  // records hold a bare GPU name, labelled here.
+  const device = v => typeof v !== "string" || /^(GPU|CPU):/.test(v) ? v
+    : /NVIDIA|GeForce|RTX|Tesla|Quadro|Radeon|\b[AHLV]\d{2,3}\b/i.test(v) ? "GPU: " + v : v;
+  md.training.append(el("h2", { text: "Training" }),
+    kv(D.training && "device" in D.training ? { ...D.training, device: device(D.training.device) } : D.training));
   md.provenance.append(el("h2", { text: "Identity" }), table(["Field", "Value"], D.identity),
     el("h2", { text: "Protocol, session and sidecar provenance" }),
     el("pre", { text: JSON.stringify(D.provenance, null, 1) }));
@@ -1003,36 +1090,78 @@
   // Recovery and calibration: one tab per parameter, plus the joint metrics.
   const groups = [...D.parameters.map(p => [p, p]), ["joint", "Joint"]];
   const ofParam = (axis, p) => D.metrics.filter(m => m.axis === axis && m.key.split(".")[0] === p);
-  const rc = sub("recovery", groups), ca = sub("calibration", groups);
-  panels.recovery.insertBefore(el("p", { class: "guide",
-    text: "True-against-estimate plots need per-dataset estimates, which the record does not store; each metric below summarises them per cell." }),
-    panels.recovery.querySelector(".subtabs"));
+  const paramTabs = [];
+  const rc = sub("recovery", groups, paramTabs), ca = sub("calibration", groups, paramTabs);
+  // Under the size pills of a parameter's recovery page: true value against
+  // posterior mean for the chosen cell, with 95% intervals; orange where the
+  // interval misses the true value.
+  const recoveryView = p => (host, c) => {
+    const name = `Cell ${c.cell.n_items} items x ${c.cell.n_persons} persons` + (c.cell.in_range ? "" : " (extrapolation)");
+    const box = el("div", { class: "panel", "aria-live": "polite" }, [el("h2", { text: name })]);
+    host.replaceChildren(box);
+    if (c.failed) { box.append(el("p", { text: `Failed at stage ${c.failed.stage}: ${c.failed.message}` })); return; }
+    const g = p === "theta" ? (c.persons || {}).theta : (c.items || {})[p];
+    const sp = g && g.shown_pairs;
+    if (!sp || !sp.truth.length) { box.append(el("p", { text: "No truth–posterior pairs recorded for this cell." })); return; }
+    const n = sp.truth.length, ok = k => [sp.truth[k], sp.mean[k], sp.q025[k], sp.q975[k]].every(v => v !== null && isFinite(v));
+    const ks = [...Array(n).keys()].filter(ok);
+    // One square range from the true values and posterior means; intervals
+    // reaching past it are clipped at the frame.
+    const vals = ks.flatMap(k => [sp.truth[k], sp.mean[k]]);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.06 || 0.5; lo -= pad; hi += pad;
+    const W = 340, H = 320, L = 46, B = 38, T = 20, R = 10;
+    const X = v => L + (v - lo) / (hi - lo) * (W - L - R), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const clip = v => Math.min(hi, Math.max(lo, v));
+    const svg = sv("svg", { width: W, height: H, role: "img", "aria-label": `${p}: true value against posterior mean` });
+    svg.append(sv("text", { x: L, y: 13, style: "font-weight:600" }, `${p}: true against estimate`),
+      sv("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "none", stroke: "var(--line)" }));
+    for (const t of roundTicks(lo, hi, 5)) {
+      svg.append(sv("text", { x: X(t), y: H - B + 14, "text-anchor": "middle", class: "axis" }, String(t)),
+        sv("text", { x: L - 4, y: Y(t) + 4, "text-anchor": "end", class: "axis" }, String(t)));
+    }
+    svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "true value"),
+      sv("text", { x: 12, y: (T + H - B) / 2, "text-anchor": "middle", class: "axis", transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "posterior mean (95% interval)"),
+      sv("line", { x1: X(lo), y1: Y(lo), x2: X(hi), y2: Y(hi), stroke: "var(--muted)", "stroke-dasharray": "4 3" }));
+    let miss = 0;
+    // Covering intervals first, misses on top.
+    const covers = k => sp.q025[k] <= sp.truth[k] && sp.truth[k] <= sp.q975[k];
+    for (const k of [...ks.filter(covers), ...ks.filter(k => !covers(k))]) {
+      const hit = covers(k), col = hit ? "var(--accent)" : "#D55E00";
+      if (!hit) miss++;
+      svg.append(sv("line", { x1: X(sp.truth[k]), x2: X(sp.truth[k]), y1: Y(clip(sp.q025[k])), y2: Y(clip(sp.q975[k])), stroke: col, opacity: hit ? "0.25" : "0.6" }),
+        sv("circle", { cx: X(sp.truth[k]), cy: Y(clip(sp.mean[k])), r: 2, fill: col, opacity: hit ? "0.7" : "0.9" }));
+    }
+    box.append(el("figure", { class: "fig" }, [svg, el("figcaption", { class: "guide",
+      text: `The first ${ks.length} of ${sp.total} datasets, each one random ${p === "theta" ? "person" : "item"}; the metrics below use all ${sp.total}. Dashed: estimate equals truth. Orange: the 95% interval misses the true value (${miss} of ${ks.length}).` })]));
+  };
   if (D.joint_omitted) for (const h of [rc.joint, ca.joint])
     h.append(el("p", { text: "Joint metrics (TARP, TCC) not computed: " + D.joint_omitted + "." }));
   for (const [axis, host] of [["recovery", rc], ["calibration", ca]]) {
     for (const [t] of groups) {
       const ms = ofParam(axis, t);
       const personOnly = m => /reliability|extreme_share/.test(m.key);
-      const view = axis === "recovery" && t !== "joint" ? null : cellView(axis, t);
+      const view = axis === "recovery" && t !== "joint" ? recoveryView(t) : cellView(axis, t);
       const extra = t === "theta" ? { view: binView(axis), metrics: ms.filter(personOnly) } : null;
       if (ms.length) host[t].append(el("p", { class: "guide basis", text: basisLine(t) }));
       if (ms.length) metricPage(host[t], ms.filter(m => !personOnly(m)), view, extra); else if (!(t === "joint" && D.joint_omitted)) host[t].append(el("p", { text: "No metrics recorded." }));
     }
   }
-  // The status of every out-of-range size, with the supported data.
+  // The size map shows which out-of-range sizes were evaluated; only
+  // failures, which it cannot show, get a table.
   if (outCells.length) {
-    const skipped = D.axes.items.flatMap(i => D.axes.persons.filter(n => !cells.get(i + "x" + n)
-      && !(D.axes.in_items.includes(i) && D.axes.in_persons.includes(n)))).length;
-    md.envelope.append(el("h2", { text: "Cells evaluated outside the trained range" }),
-      el("p", { class: "guide", text: "Shown in the plots and tables when \"Show extrapolation cells\" is on." }),
-      table(["Items", "Persons", "Status"], outCells.map(c => [String(c.cell.n_items), String(c.cell.n_persons),
-        c.failed ? `failed (${c.failed.stage}): ${c.failed.message}` : "evaluated"])));
-    if (skipped) md.envelope.append(el("p", { class: "guide", text: `${skipped} further grid size${skipped > 1 ? "s" : ""} outside the trained range ${skipped > 1 ? "were" : "was"} not evaluated.` }));
+    md.envelope.append(el("p", { class: "guide", text: "Boxed crosses: sizes evaluated outside the trained range, shown in the plots and tables when \"Show extrapolation cells\" is on." }));
+    const failed = outCells.filter(c => c.failed);
+    if (failed.length) md.envelope.append(el("h2", { text: "Extrapolation cells that failed" }),
+      table(["Items", "Persons", "Failure"], failed.map(c => [String(c.cell.n_items), String(c.cell.n_persons),
+        `${c.failed.stage}: ${c.failed.message}`])));
   }
   // References each page relies on, at its end.
   for (const [page, list] of Object.entries(D.references || {})) {
-    if (!panels[page] || !list.length) continue;
-    panels[page].append(el("section", { class: "refs" }, [el("h2", { text: "References" }),
+    // A Model section's references (irt, npe) go under that section only.
+    const host = panels[page] || md[page];
+    if (!host || !list.length) continue;
+    host.append(el("section", { class: "refs" }, [el("h2", { text: "References" }),
       el("ul", {}, list.map(r => el("li", {}, [el("strong", { text: r.topic + ": " }),
         ...r.text.split("*").map((part, k) => k % 2 ? el("em", { text: part }) : part)])))]));
   }

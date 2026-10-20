@@ -64,6 +64,21 @@ def test_no_git_gives_none(monkeypatch):
     assert info["git_dirty"] is None
 
 
+def test_training_device_names_cpu_or_gpu_without_host(monkeypatch):
+    import platform
+
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(metadata, "_cpu_model", lambda: "Some CPU")
+    assert metadata.training_device() == "CPU: Some CPU"
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda i: "NVIDIA Test GPU")
+    if keras.backend.backend() == "torch":
+        assert metadata.training_device() == "GPU: NVIDIA Test GPU"
+    assert platform.node() not in metadata.training_device()
+
+
 def test_missing_packages_are_omitted(monkeypatch):
     real = metadata.version
 

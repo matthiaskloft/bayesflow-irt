@@ -1160,8 +1160,8 @@ def _trained_map(inp: CardInputs, path: Path) -> bool:
         marker="x",
         label="card grid",
     )
-    ax.set_xlabel("persons")
-    ax.set_ylabel("items")
+    ax.set_xlabel("persons (log scale)")
+    ax.set_ylabel("items (log scale)")
     ax.legend(loc="upper right", fontsize=8)
     fig.colorbar(mesh, ax=ax, label="probability per size pair")
     ax.set_title(f"Training sizes ({dist})", fontsize=10)
@@ -1228,6 +1228,13 @@ def _reference_section(inp: CardInputs) -> list[str]:
     return md
 
 
+def _variant_label(variant: Any) -> str:
+    """The prior variant for a title: ``"fixed"`` reads ``"fixed prior"``."""
+    if variant in ("fixed", "variable"):
+        return f"{variant} prior"
+    return _or_unrecorded(variant)
+
+
 def render_markdown(inp: CardInputs, figures: dict[str, str] | None = None) -> str:
     """The Markdown card; ``figures`` maps figure keys to relative paths."""
     figures = figures or {}
@@ -1235,7 +1242,7 @@ def render_markdown(inp: CardInputs, figures: dict[str, str] | None = None) -> s
     family = str(spec.get("model", "")).lower()
     md: list[str] = [
         f"# Model card: {_or_unrecorded(spec.get('model'))} "
-        f"({_or_unrecorded(spec.get('variant'))})",
+        f"({_variant_label(spec.get('variant'))})",
         "",
         *(f"> **{b}**\n" for b in status_banners(inp)),
         _identity(inp),

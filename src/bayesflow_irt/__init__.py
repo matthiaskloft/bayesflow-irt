@@ -56,7 +56,7 @@ from .hpo import (
     make_tcc_bias_metric,
     normalize_item_posterior,
 )
-from .metadata import MetadataTracker, session_info
+from .metadata import MetadataTracker, session_info, training_device
 from .networks import MatrixEquivariantIRTSummary
 from .priors import (
     Prior,
@@ -126,6 +126,7 @@ __all__ = [
     "set_adapter_size_moments",
     "MetadataTracker",
     "session_info",
+    "training_device",
     "Cell",
     "CellFailedError",
     "EvaluationProtocol",

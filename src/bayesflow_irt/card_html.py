@@ -35,6 +35,7 @@ from .card_render import (
     _or_unrecorded,
     _priors,
     _usage,
+    _variant_label,
     bin_coverage,
     card_metrics_for,
     status_banners,
@@ -216,7 +217,10 @@ _PAGE_REFS = {
         ("Monte Carlo standard errors", "morris"),
         ("Colour palette", "okabe"),
     ],
-    "model": [("Neural posterior estimation (BayesFlow)", "bayesflow")],
+    # Model page references sit under their own section (the "irt" and
+    # "npe" sub-tabs), not under every section of the page.
+    "irt": [],
+    "npe": [("Neural posterior estimation (BayesFlow)", "bayesflow")],
     "recovery": [
         ("Monte Carlo standard errors", "morris"),
         ("Posterior contraction", "bayesflow"),
@@ -246,7 +250,7 @@ def page_references(family: str) -> dict[str, list[dict[str, str]]]:
         for page, pairs in _PAGE_REFS.items()
     }
     if family in _FAMILY_REFS:
-        out["model"].insert(
+        out["irt"].insert(
             0,
             {
                 "topic": f"{family.upper()} response model",
@@ -671,6 +675,26 @@ def trained_size_map(inp: CardInputs, max_bins: int = 60) -> dict[str, Any] | No
     }
 
 
+#: Truth-posterior pairs per cell and parameter in the dashboard's
+#: true-against-estimate plot (of the datasets per cell in the record).
+SHOWN_PAIRS = 200
+
+
+def _shown_pairs(pairs: Any) -> dict[str, Any]:
+    """The first :data:`SHOWN_PAIRS` pairs (truth, mean, 95% bounds), rounded
+    to 3 significant digits, as ``{"shown_pairs": ...}``; empty without pairs.
+    """
+    keys = ("truth", "mean", "q025", "q975")
+    if not isinstance(pairs, dict) or not all(k in pairs for k in keys):
+        return {}
+    shown = {
+        k: [None if x is None else float(f"{x:.3g}") for x in pairs[k][:SHOWN_PAIRS]]
+        for k in keys
+    }
+    shown["total"] = len(pairs["truth"])
+    return {"shown_pairs": shown}
+
+
 def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str, Any]:
     """Everything the page script reads, as one JSON-serializable dict."""
     from .card_metrics import CARD_LEVELS
@@ -681,12 +705,15 @@ def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str,
     cells = []
     for c in rec["cells"]:
         entry = {k: v for k, v in c.items() if k not in ("seed",)}
-        # Per-dataset pairs stay in evaluation.json until a plot uses them.
+        # The true-against-estimate plot shows the first SHOWN_PAIRS pairs:
+        # each is one random item or person of its own dataset, so they are a
+        # random sample; the metrics use all of them (in evaluation.json).
         for group in ("items", "persons"):
             if isinstance(entry.get(group), dict):
                 entry[group] = {
                     p: (
                         {k: x for k, x in g.items() if k != "pairs"}
+                        | _shown_pairs(g.get("pairs"))
                         if isinstance(g, dict)
                         else g
                     )
@@ -704,7 +731,7 @@ def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str,
                 figures[name] = uri
     return {
         "title": f"Model card: {_or_unrecorded(spec.get('model'))} "
-        f"({_or_unrecorded(spec.get('variant'))})",
+        f"({_variant_label(spec.get('variant'))})",
         "identity": _md_table_rows(_identity(inp)),
         "pill": _or_unrecorded(ck.get("match")),
         "banners": status_banners(inp),
