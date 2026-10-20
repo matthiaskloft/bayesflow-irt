@@ -1083,16 +1083,56 @@
   const ofParam = (axis, p) => D.metrics.filter(m => m.axis === axis && m.key.split(".")[0] === p);
   const paramTabs = [];
   const rc = sub("recovery", groups, paramTabs), ca = sub("calibration", groups, paramTabs);
-  // Under the size pills of a recovery page that has no cell panel.
-  const recoveryNote = panel => panel.replaceChildren(el("p", { class: "guide",
-    text: "The record keeps one truth–posterior pair per dataset (a random item or person) in evaluation.json; the card does not plot them yet. The metrics below summarise them per cell." }));
+  // Under the size pills of a parameter's recovery page: true value against
+  // posterior mean for the chosen cell, with 95% intervals; orange where the
+  // interval misses the true value.
+  const recoveryView = p => (host, c) => {
+    const name = `Cell ${c.cell.n_items} items x ${c.cell.n_persons} persons` + (c.cell.in_range ? "" : " (extrapolation)");
+    const box = el("div", { class: "panel", "aria-live": "polite" }, [el("h2", { text: name })]);
+    host.replaceChildren(box);
+    if (c.failed) { box.append(el("p", { text: `Failed at stage ${c.failed.stage}: ${c.failed.message}` })); return; }
+    const g = p === "theta" ? (c.persons || {}).theta : (c.items || {})[p];
+    const sp = g && g.shown_pairs;
+    if (!sp || !sp.truth.length) { box.append(el("p", { text: "No truth–posterior pairs recorded for this cell." })); return; }
+    const n = sp.truth.length, ok = k => [sp.truth[k], sp.mean[k], sp.q025[k], sp.q975[k]].every(v => v !== null && isFinite(v));
+    const ks = [...Array(n).keys()].filter(ok);
+    // One square range from the true values and posterior means; intervals
+    // reaching past it are clipped at the frame.
+    const vals = ks.flatMap(k => [sp.truth[k], sp.mean[k]]);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.06 || 0.5; lo -= pad; hi += pad;
+    const W = 340, H = 320, L = 46, B = 38, T = 20, R = 10;
+    const X = v => L + (v - lo) / (hi - lo) * (W - L - R), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const clip = v => Math.min(hi, Math.max(lo, v));
+    const svg = sv("svg", { width: W, height: H, role: "img", "aria-label": `${p}: true value against posterior mean` });
+    svg.append(sv("text", { x: L, y: 13, style: "font-weight:600" }, `${p}: true against estimate`),
+      sv("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "none", stroke: "var(--line)" }));
+    for (const t of roundTicks(lo, hi, 5)) {
+      svg.append(sv("text", { x: X(t), y: H - B + 14, "text-anchor": "middle", class: "axis" }, String(t)),
+        sv("text", { x: L - 4, y: Y(t) + 4, "text-anchor": "end", class: "axis" }, String(t)));
+    }
+    svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "true value"),
+      sv("text", { x: 12, y: (T + H - B) / 2, "text-anchor": "middle", class: "axis", transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "posterior mean (95% interval)"),
+      sv("line", { x1: X(lo), y1: Y(lo), x2: X(hi), y2: Y(hi), stroke: "var(--muted)", "stroke-dasharray": "4 3" }));
+    let miss = 0;
+    // Covering intervals first, misses on top.
+    const covers = k => sp.q025[k] <= sp.truth[k] && sp.truth[k] <= sp.q975[k];
+    for (const k of [...ks.filter(covers), ...ks.filter(k => !covers(k))]) {
+      const hit = covers(k), col = hit ? "var(--accent)" : "#D55E00";
+      if (!hit) miss++;
+      svg.append(sv("line", { x1: X(sp.truth[k]), x2: X(sp.truth[k]), y1: Y(clip(sp.q025[k])), y2: Y(clip(sp.q975[k])), stroke: col, opacity: hit ? "0.25" : "0.6" }),
+        sv("circle", { cx: X(sp.truth[k]), cy: Y(clip(sp.mean[k])), r: 2, fill: col, opacity: hit ? "0.7" : "0.9" }));
+    }
+    box.append(el("figure", { class: "fig" }, [svg, el("figcaption", { class: "guide",
+      text: `The first ${ks.length} of ${sp.total} datasets, each one random ${p === "theta" ? "person" : "item"}; the metrics below use all ${sp.total}. Dashed: estimate equals truth. Orange: the 95% interval misses the true value (${miss} of ${ks.length}).` })]));
+  };
   if (D.joint_omitted) for (const h of [rc.joint, ca.joint])
     h.append(el("p", { text: "Joint metrics (TARP, TCC) not computed: " + D.joint_omitted + "." }));
   for (const [axis, host] of [["recovery", rc], ["calibration", ca]]) {
     for (const [t] of groups) {
       const ms = ofParam(axis, t);
       const personOnly = m => /reliability|extreme_share/.test(m.key);
-      const view = axis === "recovery" && t !== "joint" ? recoveryNote : cellView(axis, t);
+      const view = axis === "recovery" && t !== "joint" ? recoveryView(t) : cellView(axis, t);
       const extra = t === "theta" ? { view: binView(axis), metrics: ms.filter(personOnly) } : null;
       if (ms.length) host[t].append(el("p", { class: "guide basis", text: basisLine(t) }));
       if (ms.length) metricPage(host[t], ms.filter(m => !personOnly(m)), view, extra); else if (!(t === "joint" && D.joint_omitted)) host[t].append(el("p", { text: "No metrics recorded." }));

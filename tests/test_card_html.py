@@ -392,3 +392,16 @@ def test_network_config_matches_what_save_writes(tmp_path):
         saved = json.loads(z.read("config.json"))
     assert net["config"]["class_name"] == saved["class_name"] == "Sequential"
     assert net["config"]["config"]["layers"] == saved["config"]["layers"]
+
+
+def test_shown_pairs_keep_the_first_pairs_rounded():
+    pairs = {
+        k: [1.234567 + i for i in range(ch.SHOWN_PAIRS + 50)]
+        for k in ("truth", "mean", "sd", "q025", "q975")
+    }
+    shown = ch._shown_pairs(pairs)["shown_pairs"]
+    assert set(shown) == {"truth", "mean", "q025", "q975", "total"}
+    assert len(shown["truth"]) == ch.SHOWN_PAIRS
+    assert shown["total"] == ch.SHOWN_PAIRS + 50
+    assert shown["mean"][0] == 1.23
+    assert ch._shown_pairs(None) == {} and ch._shown_pairs({"truth": [1.0]}) == {}
