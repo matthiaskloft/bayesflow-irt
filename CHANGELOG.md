@@ -35,7 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Model card dashboard: cells evaluated outside the trained range show up in
   the supported data: an "Extrapolation evaluated" tile on the Overview, a
   row in the Supported data table, and a square around their grid cross on
-  the training-size map.
+  the training-size map, which replaces the table of those cells (only
+  failed ones keep a table).
 - Model card dashboard: each item and theta recovery page plots true value
   against posterior mean for the chosen cell, with 95% intervals and misses
   in orange: the first 200 of the record's truth-posterior pairs (one random

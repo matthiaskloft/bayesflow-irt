@@ -1035,7 +1035,7 @@
     md.irt.append(table(D.priors.length ? ["Parameter", "Distribution", "Hyperparameters"] : [""], D.priors));
   }
   md.envelope.append(el("h2", { text: "Supported data" }), table(["", ""], [...D.envelope.slice(0, 2),
-    ...(outCells.length ? [["Evaluated outside the trained range", `${outSizes().replace(" · ", ", ")} (${outCells.length} cells, listed below): extrapolation, not a supported use`]] : []),
+    ...(outCells.length ? [["Evaluated outside the trained range", `${outSizes().replace(" · ", ", ")} (${outCells.length} cells, boxed on the map below): extrapolation, not a supported use`]] : []),
     ...D.envelope.slice(2)]));
   if (D.trained_sizes) md.envelope.append(sizeMap(D.trained_sizes));
   // NPE architecture: every recorded setting, nested configs flattened to
@@ -1138,15 +1138,17 @@
       if (ms.length) metricPage(host[t], ms.filter(m => !personOnly(m)), view, extra); else if (!(t === "joint" && D.joint_omitted)) host[t].append(el("p", { text: "No metrics recorded." }));
     }
   }
-  // The status of every out-of-range size, with the supported data.
+  // The size map shows which out-of-range sizes were evaluated; only
+  // failures, which it cannot show, get a table.
   if (outCells.length) {
     const skipped = D.axes.items.flatMap(i => D.axes.persons.filter(n => !cells.get(i + "x" + n)
       && !(D.axes.in_items.includes(i) && D.axes.in_persons.includes(n)))).length;
-    md.envelope.append(el("h2", { text: "Cells evaluated outside the trained range" }),
-      el("p", { class: "guide", text: "Shown in the plots and tables when \"Show extrapolation cells\" is on." }),
-      table(["Items", "Persons", "Status"], outCells.map(c => [String(c.cell.n_items), String(c.cell.n_persons),
-        c.failed ? `failed (${c.failed.stage}): ${c.failed.message}` : "evaluated"])));
-    if (skipped) md.envelope.append(el("p", { class: "guide", text: `${skipped} further grid size${skipped > 1 ? "s" : ""} outside the trained range ${skipped > 1 ? "were" : "was"} not evaluated.` }));
+    md.envelope.append(el("p", { class: "guide", text: "Boxed crosses: sizes evaluated outside the trained range, shown in the plots and tables when \"Show extrapolation cells\" is on."
+      + (skipped ? ` The other ${skipped} grid size${skipped > 1 ? "s" : ""} outside it ${skipped > 1 ? "were" : "was"} not evaluated.` : "") }));
+    const failed = outCells.filter(c => c.failed);
+    if (failed.length) md.envelope.append(el("h2", { text: "Extrapolation cells that failed" }),
+      table(["Items", "Persons", "Failure"], failed.map(c => [String(c.cell.n_items), String(c.cell.n_persons),
+        `${c.failed.stage}: ${c.failed.message}`])));
   }
   // References each page relies on, at its end.
   for (const [page, list] of Object.entries(D.references || {})) {
