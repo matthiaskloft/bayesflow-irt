@@ -6,8 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
+- Release automation for PyPI, TestPyPI rehearsals, and GitHub releases,
+  with CI and distribution validation; GitHub release and PyPI badges.
 - `training_device()`, the training device as `"GPU: <model>"` or
   `"CPU: <model>"` for `training["device"]`, without the hostname.
 

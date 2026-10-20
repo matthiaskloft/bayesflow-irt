@@ -46,6 +46,38 @@ you touch training-heavy paths.
 - Keep type hints and docstrings on public classes and functions.
 - Update `README.md` when public behavior or workflow changes.
 
+## Releases
+
+The `Release` workflow publishes pushed `vX.Y.Z` tags to PyPI, then creates
+a GitHub release with the changelog entry and the checked wheel and sdist.
+It requires the tagged commit to be on `main`, reruns the test and lint
+workflow, checks distribution metadata and contents, and smoke-tests the
+installed wheel in a clean environment with the CPU torch backend.
+
+One-time setup:
+
+1. Create GitHub environments `pypi` and `testpypi`. Require a reviewer for
+   `pypi` and restrict it to `v*` tags; allow only `main` for `testpypi`.
+2. Register Trusted Publishers on [PyPI](https://pypi.org/manage/account/publishing/)
+   and [TestPyPI](https://test.pypi.org/manage/account/publishing/) for project
+   `bayesflow-irt`, owner `matthiaskloft`, repository `bayesflow-irt`, workflow
+   `release.yml`, and the respective environment. No API token is needed.
+3. After merging, rehearse with
+   `gh workflow run release.yml --ref main -f destination=testpypi`.
+
+For each stable release, prepare a PR updating `pyproject.toml`, the
+`__version__` fallback in `src/bayesflow_irt/__init__.py`, and the version
+and release date in `CITATION.cff`. Add a non-empty
+`## [X.Y.Z] - YYYY-MM-DD` entry to `CHANGELOG.md` with the same date.
+After merging and green CI, tag the merged commit and push `vX.Y.Z`.
+Approve the `pypi` deployment when prompted, then verify a fresh install
+and `pip check`.
+
+If validation or CI fails, fix the cause before publishing. Never move a
+published tag or replace an index upload; use a new version. If PyPI succeeds
+but the GitHub release fails, rerun only the failed jobs. An existing draft
+release must be completed manually with the run's notes and artifacts.
+
 ## References maintenance
 
 - Keep root `references.md` in sync with public theory-facing behavior.
