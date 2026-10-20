@@ -22,6 +22,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   set of line weights.
 - Model card dashboard: Recovery and Calibration keep the same parameter tab
   chosen, as they already did the cell.
+- Model card dashboard: cells evaluated outside the trained range show up in
+  the supported data: an "Extrapolation evaluated" tile on the Overview, a
+  row in the Supported data table, and squares on the training-size map. The
+  recovery note under the size pills now says the record keeps the
+  truth-posterior pairs, which the card does not plot yet.
 
 ### Fixed
 

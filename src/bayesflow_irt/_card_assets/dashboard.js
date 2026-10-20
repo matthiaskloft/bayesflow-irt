@@ -70,6 +70,7 @@
     group("Model", [
       tile("Trained range", trained.replace(", ", " · ")),
       ...(validated ? [tile("Validated range", validated.replace(", ", " · "))] : []),
+      ...(outCells.length ? [tile("Extrapolation evaluated", outSizes(), `${outCells.length} cells, not a supported use`)] : []),
       tile("Checkpoint match", D.pill),
     ]),
     group("Evaluation", [
@@ -354,6 +355,14 @@
   const axes = () => showOut ? ALL_AXES : IN_AXES;
   // Cells outside the trained range that the line plots add (switch on), as
   // dashed lines that leave the in-range median and band unchanged.
+  // The sizes outside the trained range among the evaluated cells, e.g.
+  // "items 3 · persons 1000".
+  const outSizes = () => {
+    const uniq = a => [...new Set(a)].sort((u, v) => u - v).join(", ");
+    const it = uniq(outCells.map(c => c.cell.n_items).filter(i => !D.axes.in_items.includes(i)));
+    const pe = uniq(outCells.map(c => c.cell.n_persons).filter(n => !D.axes.in_persons.includes(n)));
+    return [it && "items " + it, pe && "persons " + pe].filter(Boolean).join(" · ");
+  };
   const outKeys = () => showOut ? outCells.filter(c => !c.failed).map(c => c.cell.n_items + "x" + c.cell.n_persons) : [];
   const EXTRAP_GUIDE = "Squares: cells outside the trained range (extrapolation; the network was not trained on them, so they show how far it carries over, not a supported use); dashed lines: the trained range's person bounds; ";
   function cellPoints(m, ax = IN_AXES) {
@@ -553,10 +562,15 @@
     svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "persons"),
       sv("text", { x: 12, y: (T + H - B) / 2, "text-anchor": "middle", class: "axis",
         transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "items"));
+    // Grid sizes evaluated outside the trained range: a square, as in the
+    // plots, in place of the cross.
+    const extrap = new Set(outCells.filter(c => !c.failed).map(c => c.cell.n_items + "x" + c.cell.n_persons));
     for (const p of m.grid.persons) for (const i of m.grid.items) {
       const cx = X(p), cy = Y(i);
-      svg.append(sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
-        stroke: "var(--fg)", "stroke-width": "1.3" }));
+      svg.append(extrap.has(i + "x" + p)
+        ? sv("rect", { x: cx - 3.5, y: cy - 3.5, width: 7, height: 7, fill: "none", stroke: "var(--fg)", "stroke-width": "1.3" })
+        : sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
+          stroke: "var(--fg)", "stroke-width": "1.3" }));
     }
     // Legend: shade scale and the grid marker.
     const lx0 = W - R + 18, ly0 = T + 8, lh = 120;
@@ -569,6 +583,8 @@
       sv("text", { x: lx0, y: ly0 + lh + 16, class: "axis" }, "per size pair"),
       sv("path", { d: `M${lx0 + 3},${ly0 + lh + 31}l6,6m-6,0l6,-6`, stroke: "var(--fg)", "stroke-width": "1.3" }),
       sv("text", { x: lx0 + 16, y: ly0 + lh + 38, class: "axis" }, "card grid"));
+    if (extrap.size) svg.append(sv("rect", { x: lx0 + 2.5, y: ly0 + lh + 47.5, width: 7, height: 7, fill: "none", stroke: "var(--fg)", "stroke-width": "1.3" }),
+      sv("text", { x: lx0 + 16, y: ly0 + lh + 56, class: "axis" }, "extrapolation"));
     return svg;
   }
 
@@ -1017,7 +1033,9 @@
   } else {
     md.irt.append(table(D.priors.length ? ["Parameter", "Distribution", "Hyperparameters"] : [""], D.priors));
   }
-  md.envelope.append(el("h2", { text: "Supported data" }), table(["", ""], D.envelope));
+  md.envelope.append(el("h2", { text: "Supported data" }), table(["", ""], [...D.envelope.slice(0, 2),
+    ...(outCells.length ? [["Evaluated outside the trained range", `${outSizes().replace(" · ", ", ")} (${outCells.length} cells, listed below): extrapolation, not a supported use`]] : []),
+    ...D.envelope.slice(2)]));
   if (D.trained_sizes) md.envelope.append(sizeMap(D.trained_sizes));
   // NPE architecture: every recorded setting, nested configs flattened to
   // dotted keys and grouped by network. HPO sidecars keep the settings in
