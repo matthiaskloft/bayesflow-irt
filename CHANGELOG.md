@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   calibration error averages over (records without them keep the six summary
   levels), and the separate per-cell plot is gone. Its caption notes that
   coverage misses a shifted posterior, which the SBC ECDF difference shows.
+- Model card dashboard: the SBC ECDF difference plot draws every in-range
+  cell faded behind the chosen one, with their median, as the coverage plot
+  does. The sidebar header is set apart from the page tabs.
 
 ### Fixed
 
