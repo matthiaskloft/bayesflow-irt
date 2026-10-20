@@ -1059,16 +1059,16 @@
   const ofParam = (axis, p) => D.metrics.filter(m => m.axis === axis && m.key.split(".")[0] === p);
   const paramTabs = [];
   const rc = sub("recovery", groups, paramTabs), ca = sub("calibration", groups, paramTabs);
-  panels.recovery.insertBefore(el("p", { class: "guide",
-    text: "True-against-estimate plots need per-dataset estimates, which the record does not store; each metric below summarises them per cell." }),
-    panels.recovery.querySelector(".subtabs"));
+  // Under the size pills of a recovery page that has no cell panel.
+  const recoveryNote = panel => panel.replaceChildren(el("p", { class: "guide",
+    text: "The record keeps one truth–posterior pair per dataset (a random item or person) in evaluation.json; the card does not plot them yet. The metrics below summarise them per cell." }));
   if (D.joint_omitted) for (const h of [rc.joint, ca.joint])
     h.append(el("p", { text: "Joint metrics (TARP, TCC) not computed: " + D.joint_omitted + "." }));
   for (const [axis, host] of [["recovery", rc], ["calibration", ca]]) {
     for (const [t] of groups) {
       const ms = ofParam(axis, t);
       const personOnly = m => /reliability|extreme_share/.test(m.key);
-      const view = axis === "recovery" && t !== "joint" ? null : cellView(axis, t);
+      const view = axis === "recovery" && t !== "joint" ? recoveryNote : cellView(axis, t);
       const extra = t === "theta" ? { view: binView(axis), metrics: ms.filter(personOnly) } : null;
       if (ms.length) host[t].append(el("p", { class: "guide basis", text: basisLine(t) }));
       if (ms.length) metricPage(host[t], ms.filter(m => !personOnly(m)), view, extra); else if (!(t === "joint" && D.joint_omitted)) host[t].append(el("p", { text: "No metrics recorded." }));
