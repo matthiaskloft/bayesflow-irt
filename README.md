@@ -1,5 +1,7 @@
 # bayesflow-irt
 
+[![GitHub release](https://img.shields.io/github/v/release/matthiaskloft/bayesflow-irt)](https://github.com/matthiaskloft/bayesflow-irt/releases/latest)
+[![PyPI version](https://img.shields.io/pypi/v/bayesflow-irt)](https://pypi.org/project/bayesflow-irt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
