@@ -293,7 +293,7 @@
     return ok.map(k => `${X(xs[k])},${Y(hi[k])}`).concat(ok.slice().reverse().map(k => `${X(xs[k])},${Y(lo[k])}`)).join(" ");
   }
   function plot(title, xs, series, opts) {
-    // series: [{y, lo?, hi?, kind: "line"|"points"|"band", dash?}]
+    // series: [{y, lo?, hi?, kind: "line"|"points"|"band", dash?, faint?, bold?}]
     const W = 260, H = 190, L = 42, B = 30, T = 18, R = 8;
     const [x0, x1] = opts.x, [y0, y1] = opts.y;
     const X = x => L + (x - x0) / (x1 - x0) * (W - L - R), Y = y => T + (1 - (y - y0) / (y1 - y0)) * (H - T - B);
@@ -318,7 +318,8 @@
       } else if (s.kind === "line") {
         // A missing value (null) is left out, not drawn as zero.
         svg.append(sv("polyline", { points: xs.flatMap((x, k) => s.y[k] === null || !isFinite(s.y[k]) ? [] : [`${X(x)},${Y(clip(s.y[k]))}`]).join(" "),
-          fill: "none", stroke: s.dash ? "var(--muted)" : "var(--accent)", "stroke-dasharray": s.dash ? "4 3" : "none", "stroke-width": "1.5" }));
+          fill: "none", stroke: s.dash || s.faint ? "var(--muted)" : s.bold ? "var(--fg)" : "var(--accent)", "stroke-dasharray": s.dash ? "4 3" : "none",
+          "stroke-width": s.faint ? "1" : s.bold ? "2" : "1.5", opacity: s.faint ? "0.3" : "1" }));
       } else {
         xs.forEach((x, k) => {
           if (s.y[k] === null) return;
@@ -675,16 +676,30 @@
         if (g.sbc_ecdf) {
           const b = D.band;
           const lo = b.lower.map((v, k) => v - b.grid[k]), hi = b.upper.map((v, k) => v - b.grid[k]);
-          const dev = g.sbc_ecdf.map((v, k) => v === null ? null : v - b.grid[k]);
-          // The axis is pinned at ±0.05 and widens only when the band or the
-          // deviation reaches past it (to 1.2 times the farthest value).
-          const far = Math.max(...[...lo, ...hi, ...dev].filter(v => v !== null && isFinite(v)).map(Math.abs));
+          const devOf = s => s.sbc_ecdf.map((v, k) => v === null ? null : v - b.grid[k]);
+          const dev = devOf(g);
+          // Every in-range cell faded behind this one, with their median, as
+          // in the coverage plot.
+          const others = D.axes.in_items.flatMap(i => D.axes.in_persons.map(n => cells.get(i + "x" + n)))
+            .map(o => o && !o.failed ? (p === "theta" ? (o.persons || {}).theta : (o.items || {})[p]) : null)
+            .filter(s => s && s.sbc_ecdf).map(devOf);
+          const median = b.grid.map((_, k) => {
+            const v = others.map(d => d[k]).filter(x => x !== null).sort((u, w) => u - w);
+            return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null;
+          });
+          // The axis is pinned at ±0.05 and widens only when the band or a
+          // deviation reaches past it (to 1.2 times the farthest value); the
+          // other cells count, so it does not move when another cell is chosen.
+          const far = Math.max(...[...lo, ...hi, ...dev, ...others.flat()].filter(v => v !== null && isFinite(v)).map(Math.abs));
           const r = far > 0.05 ? far * 1.2 : 0.05, yr = [-r, r];
-          plots.append(plot(`${p}: SBC ECDF difference`, b.grid, [
+          plots.append(el("figure", { class: "fig" }, [plot(`${p}: SBC ECDF difference`, b.grid, [
             { kind: "band", step: true, lo, hi },
+            ...others.map(y => ({ kind: "line", y, faint: true })),
             { kind: "line", y: b.grid.map(() => 0), dash: true },
+            ...(others.length > 1 ? [{ kind: "line", y: median, bold: true }] : []),
             { kind: "line", y: dev },
-          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: r === 0.05 ? [-0.05, -0.025, 0, 0.025, 0.05] : roundTicks(-r, r, 5), xl: "rank fraction (band: 95% simultaneous)" }));
+          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: r === 0.05 ? [-0.05, -0.025, 0, 0.025, 0.05] : roundTicks(-r, r, 5), xl: "rank fraction (band: 95% simultaneous)" }),
+          el("figcaption", { class: "guide", text: "ECDF of the posterior ranks minus uniform. Grey: every in-range cell; bold: median; coloured: this cell. Shaded: 95% simultaneous band for one cell, so across many cells a few grey lines leaving it are expected by chance." })]));
         }
       }
     };
