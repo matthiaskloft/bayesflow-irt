@@ -17,8 +17,16 @@
     const n = document.createElementNS(SVG, tag);
     for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
     if (text !== undefined) n.textContent = text;
-    // A viewBox lets CSS shrink the plot to a narrow screen.
-    if (tag === "svg" && attrs.width) n.setAttribute("viewBox", `0 0 ${attrs.width} ${attrs.height}`);
+    // Keep drawing coordinates independent of the displayed plot size.
+    if (tag === "svg" && attrs.width) {
+      n.setAttribute("viewBox", `0 0 ${attrs.width} ${attrs.height}`);
+      // Relative sizing lets text zoom enlarge plots and their labels together.
+      if (attrs.role === "img") {
+        n.setAttribute("width", attrs.width * 1.2);
+        n.setAttribute("height", attrs.height * 1.2);
+        n.setAttribute("style", `width:${attrs.width * 1.2 / 16}rem;height:auto`);
+      }
+    }
     return n;
   }
   function fmt(v, d) {
@@ -658,11 +666,16 @@
         ? "Equal-probability bins of the true theta, all scored persons; MCSE clustered by dataset."
         : "Bins of the true theta, one random person per dataset.") }));
       if (axis === "calibration") {
+        const ends = [0.95, ...c.bins.flatMap(b => [b.coverage, ...(b.interval || [])])]
+          .filter(v => v !== null && isFinite(v));
+        const low = Math.min(...ends), high = Math.max(...ends);
+        const pad = Math.max(0.01, (high - low) * 0.1);
+        const y0 = Math.max(0, low - pad), y1 = Math.min(1, high + pad);
         box.append(plot(`theta: coverage at 0.95 by bin (95% ${kind})`, mids, [
           { kind: "line", y: mids.map(() => 0.95), dash: true },
           { kind: "points", y: c.bins.map(b => b.coverage), lo: c.bins.map(b => b.interval ? b.interval[0] : null),
             hi: c.bins.map(b => b.interval ? b.interval[1] : null), grey: grey },
-        ], { ...xopts, y: [0, 1], yt: [0, 0.5, 0.95] }));
+        ], { ...xopts, y: [y0, y1], yt: [...new Set([...roundTicks(y0, y1, 4), 0.95])].sort((a, b) => a - b) }));
       } else {
         const bv = c.bins.map(b => b.bias ? b.bias[0] : null), bs = c.bins.map(b => b.bias ? b.bias[1] : null);
         const lo = bv.map((v, k) => twoSe(v, bs[k], -1)), hi = bv.map((v, k) => twoSe(v, bs[k], 1));
@@ -672,12 +685,13 @@
           { kind: "points", y: bv, lo, hi, grey: grey },
         ], { ...xopts, y: [y0, y1], yt: roundTicks(y0, y1, 4) }));
       }
-      box.append(table(["bin", "edges", clustered ? "n / datasets" : "n", "bias (MCSE)", `coverage 0.95 [${kind} 95%]`], c.bins.map((b, k) => [
+      box.append(el("details", {}, [el("summary", { text: "Table: theta bins" }),
+        table(["bin", "edges", clustered ? "n / datasets" : "n", "bias (MCSE)", `coverage 0.95 [${kind} 95%]`], c.bins.map((b, k) => [
         k, `[${b.edges[0] === null ? "-inf" : fmt(b.edges[0], 1)}, ${b.edges[1] === null ? "inf" : fmt(b.edges[1], 1)})`,
         (clustered ? `${b.n} / ${b.clusters}` : `${b.n}`) + (b.small ? ` (${rule})` : ""),
         b.bias ? `${fmt(b.bias[0])} (${fmt(b.bias[1])})` : "–",
         b.coverage === null ? "–" : b.interval ? `${fmt(b.coverage)} [${fmt(b.interval[0])}, ${fmt(b.interval[1])}]` : fmt(b.coverage)]),
-        k => c.bins[k].small ? "small-n" : ""));
+        k => c.bins[k].small ? "small-n" : "")]));
     };
   }
 
@@ -1049,7 +1063,7 @@
   md.envelope.append(el("h2", { text: "Supported data" }), table(["", ""], [...D.envelope.slice(0, 2),
     ...(outCells.length ? [["Evaluated outside the trained range", `${outSizes().replace(" · ", ", ")} (${outCells.length} cells, boxed on the map below): extrapolation, not a supported use`]] : []),
     ...D.envelope.slice(2)]));
-  if (D.trained_sizes) md.envelope.append(sizeMap(D.trained_sizes));
+  if (D.trained_sizes) md.envelope.append(el("div", { class: "plots" }, [sizeMap(D.trained_sizes)]));
   // NPE architecture: every recorded setting, nested configs flattened to
   // dotted keys and grouped by network. HPO sidecars keep the settings in
   // training.hpo_trial_params, split here by their prefix.
@@ -1135,8 +1149,8 @@
       svg.append(sv("line", { x1: X(sp.truth[k]), x2: X(sp.truth[k]), y1: Y(clip(sp.q025[k])), y2: Y(clip(sp.q975[k])), stroke: col, opacity: hit ? "0.25" : "0.6" }),
         sv("circle", { cx: X(sp.truth[k]), cy: Y(clip(sp.mean[k])), r: 2, fill: col, opacity: hit ? "0.7" : "0.9" }));
     }
-    box.append(el("figure", { class: "fig" }, [svg, el("figcaption", { class: "guide",
-      text: `The first ${ks.length} of ${sp.total} datasets, each one random ${p === "theta" ? "person" : "item"}; the metrics below use all ${sp.total}. Dashed: estimate equals truth. Orange: the 95% interval misses the true value (${miss} of ${ks.length}).` })]));
+    box.append(el("div", { class: "plots" }, [el("figure", { class: "fig", style: "width:25.5rem" }, [svg, el("figcaption", { class: "guide",
+      text: `The first ${ks.length} of ${sp.total} datasets, each one random ${p === "theta" ? "person" : "item"}; the metrics below use all ${sp.total}. Dashed: estimate equals truth. Orange: the 95% interval misses the true value (${miss} of ${ks.length}).` })])]));
   };
   if (D.joint_omitted) for (const h of [rc.joint, ca.joint])
     h.append(el("p", { text: "Joint metrics (TARP, TCC) not computed: " + D.joint_omitted + "." }));
