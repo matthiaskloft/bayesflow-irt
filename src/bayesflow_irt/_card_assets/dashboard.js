@@ -180,7 +180,7 @@
     const row = el("div", { class: "pills", role: "group", "aria-label": label }, [el("span", { class: "pills-label", text: label })]);
     const buttons = values.map((v, k) => {
       const b = el("button", { type: "button", class: "pill" }, [
-        colours ? el("i", { class: "dot", style: `background:${SERIES[k % SERIES.length]}` }) : "", String(v)]);
+        colours ? el("i", { class: "dot", style: `background:${itemColour(v)}` }) : "", String(v)]);
       b.addEventListener("click", () => key === "i" ? select(v, selected.n) : select(selected.i, v));
       row.append(b);
       return b;
@@ -352,6 +352,9 @@
   const ALL_AXES = {
     items: D.axes.items.filter(i => D.cells.some(c => c.cell.n_items === i)),
     persons: D.axes.persons.filter(n => D.cells.some(c => c.cell.n_persons === n)) };
+  // Reserve the original colours for in-range sizes before adding extrapolation sizes.
+  const colourItems = [...IN_AXES.items, ...ALL_AXES.items.filter(i => !IN_AXES.items.includes(i))];
+  const itemColour = i => SERIES[colourItems.indexOf(i) % SERIES.length];
   const axes = () => showOut ? ALL_AXES : IN_AXES;
   // Cells outside the trained range that the line plots add (switch on), as
   // dashed lines that leave the in-range median and band unchanged.
@@ -437,7 +440,7 @@
     persons.forEach((p, xi) => svg.append(sv("text", { x: L + step * (xi + 0.5), y: H - B + 13, "text-anchor": "middle", class: "axis" }, String(p))));
     svg.append(sv("text", { x: (L + W) / 2, y: H - 6, "text-anchor": "middle", class: "axis" }, "persons"));
     for (const d of pts) {
-      const col = SERIES[d.si % SERIES.length], x = X(d.xi, d.si);
+      const col = itemColour(d.i), x = X(d.xi, d.si);
       if (d.se !== null) svg.append(sv("line", { x1: x, x2: x, y1: Y(clip(d.v - 2 * d.se)), y2: Y(clip(d.v + 2 * d.se)), stroke: col }));
       // A value outside the fixed axis is drawn as a triangle at the edge.
       // A cell outside the trained range is a square, one inside a circle.
@@ -463,7 +466,7 @@
     // reference, next to where the card's point is (or would be: a cell the
     // card failed still shows the references).
     for (const d of refPoints(m, ax)) {
-      const col = SERIES[d.si % SERIES.length], rx = X(d.xi, d.si) + 5 + 4 * d.k, ry = Y(clip(d.v));
+      const col = itemColour(d.i), rx = X(d.xi, d.si) + 5 + 4 * d.k, ry = Y(clip(d.v));
       if (d.se !== null) svg.append(sv("line", { x1: rx, x2: rx, y1: Y(clip(d.v - 2 * d.se)), y2: Y(clip(d.v + 2 * d.se)), stroke: col, opacity: "0.6" }));
       const mark = refMark(d.k, rx, ry, col);
       mark.append(sv("title", {}, `${d.r.name}, ${d.i} items x ${d.p} persons: ${fmt(d.v)} (MCSE ${fmt(d.se)})`));
@@ -936,8 +939,8 @@
   }
   // One legend per section: the item counts are the same in every plot.
   const itemLegend = (items = D.axes.in_items) => el("div", { class: "legend items-legend" }, [el("span", { text: "items:" }),
-    ...items.map((i, si) => el("span", {}, [
-      el("i", { class: "dot", style: `background:${SERIES[si % SERIES.length]}` }), String(i)]))]);
+    ...items.map(i => el("span", {}, [
+      el("i", { class: "dot", style: `background:${itemColour(i)}` }), String(i)]))]);
   const headline = suffix => D.parameters.map(p => D.metrics.find(x => x.key === `${p}.${suffix}`)).filter(Boolean);
   const glance = (host, title, suffix, text) => {
     if (title) host.append(el("h3", { text: title }));
