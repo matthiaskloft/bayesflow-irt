@@ -570,6 +570,10 @@ class TestMatrixEquivariantIRTSummary:
         nonzero). It does NOT extend to `dropout > 0` with `training=True` —
         see `test_hartford_block_chunked_forward_dropout_is_distributional_not_bitwise`
         for why, and what invariant *does* hold in that case."""
+        # Seed the weight init: it draws from the global Keras RNG, whose state
+        # depends on which tests ran earlier, and float32 summation-order error
+        # sits close enough to the 1e-6 tolerance for some inits to exceed it.
+        keras.utils.set_random_seed(0)
         block = _HartfordEMNBlock(hidden_dim=6, activation="mish", dropout=0.0)
         n_persons = 17
         x = (
@@ -2177,6 +2181,7 @@ class TestHartfordNormPlacement:
             .normal(size=(2, n_persons, 4, 5))
             .astype(np.float32)
         )
+        keras.utils.set_random_seed(0)  # see the dense-match test above
         block = _HartfordEMNBlock(
             hidden_dim=5, activation="mish", dropout=0.0, norm_placement=placement
         )
