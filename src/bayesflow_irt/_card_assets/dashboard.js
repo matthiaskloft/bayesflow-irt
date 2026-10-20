@@ -294,7 +294,7 @@
   }
   function plot(title, xs, series, opts) {
     // series: [{y, lo?, hi?, kind: "line"|"points"|"band", dash?, faint?, bold?}]
-    const W = 260, H = 190, L = 42, B = 30, T = 18, R = 8;
+    const W = opts.w || 260, H = 190, L = 42, B = 30, T = 18, R = 8;
     const [x0, x1] = opts.x, [y0, y1] = opts.y;
     const X = x => L + (x - x0) / (x1 - x0) * (W - L - R), Y = y => T + (1 - (y - y0) / (y1 - y0)) * (H - T - B);
     const svg = sv("svg", { width: W, height: H, role: "img", "aria-label": title });
@@ -319,7 +319,7 @@
         // A missing value (null) is left out, not drawn as zero.
         svg.append(sv("polyline", { points: xs.flatMap((x, k) => s.y[k] === null || !isFinite(s.y[k]) ? [] : [`${X(x)},${Y(clip(s.y[k]))}`]).join(" "),
           fill: "none", stroke: s.dash || s.faint ? "var(--muted)" : s.bold ? "var(--fg)" : "var(--accent)", "stroke-dasharray": s.dash ? "4 3" : "none",
-          "stroke-width": s.faint ? "1" : s.bold ? "2" : "1.5", opacity: s.faint ? "0.3" : "1" }));
+          "stroke-width": s.faint ? "1" : s.bold ? "1.25" : "1.5", opacity: s.faint ? "0.3" : "1" }));
       } else {
         xs.forEach((x, k) => {
           if (s.y[k] === null) return;
@@ -344,6 +344,9 @@
     items: D.axes.items.filter(i => D.cells.some(c => c.cell.n_items === i)),
     persons: D.axes.persons.filter(n => D.cells.some(c => c.cell.n_persons === n)) };
   const axes = () => showOut ? ALL_AXES : IN_AXES;
+  // Cells outside the trained range that the line plots add (switch on), as
+  // dashed lines that leave the in-range median and band unchanged.
+  const outKeys = () => showOut ? outCells.filter(c => !c.failed).map(c => c.cell.n_items + "x" + c.cell.n_persons) : [];
   const EXTRAP_GUIDE = "Squares: cells outside the trained range (extrapolation; the network was not trained on them, so they show how far it carries over, not a supported use); dashed lines: the trained range's person bounds; ";
   function cellPoints(m, ax = IN_AXES) {
     const pts = [];
@@ -672,7 +675,7 @@
       if (axis === "calibration") {
         const curves = coverageCurves(p, c.cell.n_items + "x" + c.cell.n_persons);
         if (curves) plots.append(el("figure", { class: "fig" }, [curves, el("figcaption", { class: "guide",
-          text: "Central-interval coverage minus nominal, at the levels the calibration error averages over. Grey: every in-range cell; shaded: lowest to highest; bold: median; coloured: this cell, bars ±2 MCSE. Dashed: nominal; orange: maximum (coverage 1), shown where it fits the axis. Coverage misses a posterior shifted to one side: the two tails cancel. The SBC ECDF difference shows it." })]));
+          text: "Central-interval coverage minus nominal, at the levels the calibration error averages over. Grey: every in-range cell; shaded: lowest to highest; black (white in dark mode): their median; coloured: this cell, bars ±2 MCSE. Dashed: nominal; orange: maximum (coverage 1), shown where it fits the axis. Coverage misses a posterior shifted to one side: the two tails cancel. The SBC ECDF difference shows it." + (outKeys().length ? " Dashed grey: extrapolation cells, not in the median or the shading." : "") })]));
         if (g.sbc_ecdf) {
           const b = D.band;
           const lo = b.lower.map((v, k) => v - b.grid[k]), hi = b.upper.map((v, k) => v - b.grid[k]);
@@ -683,6 +686,8 @@
           const others = D.axes.in_items.flatMap(i => D.axes.in_persons.map(n => cells.get(i + "x" + n)))
             .map(o => o && !o.failed ? (p === "theta" ? (o.persons || {}).theta : (o.items || {})[p]) : null)
             .filter(s => s && s.sbc_ecdf).map(devOf);
+          const outside = outKeys().map(k => cells.get(k)).map(o => p === "theta" ? (o.persons || {}).theta : (o.items || {})[p])
+            .filter(s => s && s.sbc_ecdf).map(devOf);
           const median = b.grid.map((_, k) => {
             const v = others.map(d => d[k]).filter(x => x !== null).sort((u, w) => u - w);
             return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null;
@@ -690,16 +695,17 @@
           // The axis is pinned at ±0.05 and widens only when the band or a
           // deviation reaches past it (to 1.2 times the farthest value); the
           // other cells count, so it does not move when another cell is chosen.
-          const far = Math.max(...[...lo, ...hi, ...dev, ...others.flat()].filter(v => v !== null && isFinite(v)).map(Math.abs));
+          const far = Math.max(...[...lo, ...hi, ...dev, ...others.flat(), ...outside.flat()].filter(v => v !== null && isFinite(v)).map(Math.abs));
           const r = far > 0.05 ? far * 1.2 : 0.05, yr = [-r, r];
           plots.append(el("figure", { class: "fig" }, [plot(`${p}: SBC ECDF difference`, b.grid, [
             { kind: "band", step: true, lo, hi },
             ...others.map(y => ({ kind: "line", y, faint: true })),
+            ...outside.map(y => ({ kind: "line", y, faint: true, dash: true })),
             { kind: "line", y: b.grid.map(() => 0), dash: true },
             ...(others.length > 1 ? [{ kind: "line", y: median, bold: true }] : []),
             { kind: "line", y: dev },
-          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: r === 0.05 ? [-0.05, -0.025, 0, 0.025, 0.05] : roundTicks(-r, r, 5), xl: "rank fraction (band: 95% simultaneous)" }),
-          el("figcaption", { class: "guide", text: "ECDF of the posterior ranks minus uniform. Grey: every in-range cell; bold: median; coloured: this cell. Shaded: 95% simultaneous band for one cell, so across many cells a few grey lines leaving it are expected by chance." })]));
+          ], { x: [0, 1], y: yr, xt: [0, 0.5, 1], yt: r === 0.05 ? [-0.05, -0.025, 0, 0.025, 0.05] : roundTicks(-r, r, 5), xl: "rank fraction (band: 95% simultaneous)", w: 300 }),
+          el("figcaption", { class: "guide", text: "ECDF of the posterior ranks minus uniform. Grey: every in-range cell; black (white in dark mode): their median; coloured: this cell. Shaded: 95% simultaneous band for one cell, so across many cells a few grey lines leaving it are expected by chance." + (outside.length ? " Dashed grey: extrapolation cells, not in the median." : "") })]));
         }
       }
     };
@@ -732,6 +738,7 @@
       return { key, y, se };
     };
     const lines = inRange.map(lineOf);
+    const outside = outKeys().map(lineOf).filter(Boolean);
     const sel = lines.find(d => d.key === chosen) || (chosen ? lineOf(chosen) : null);
     const at = k => lines.map(d => d.y[k]).filter(v => v !== null).sort((u, v) => u - v);
     const median = levels.map((_, k) => { const v = at(k); return v.length ? (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2 : null; });
@@ -741,7 +748,7 @@
     // does not move when another cell is chosen; never above 0.5, the most
     // coverage can exceed a level (at 0.5), nor below -level (coverage 0).
     // An out-of-range cell widens the axis to fit itself.
-    const vals = [...lines, ...(sel && !lines.includes(sel) ? [sel] : [])].flatMap(d => d.y.flatMap((v, k) => v === null ? [] : [v - 2 * (d.se[k] || 0), v + 2 * (d.se[k] || 0)]));
+    const vals = [...lines, ...outside, ...(sel && !lines.includes(sel) ? [sel] : [])].flatMap(d => d.y.flatMap((v, k) => v === null ? [] : [v - 2 * (d.se[k] || 0), v + 2 * (d.se[k] || 0)]));
     const lo = Math.max(-Math.max(...levels), Math.min(0, ...vals) * 1.2) || -0.05, hi = Math.min(0.5, Math.max(0, ...vals) * 1.2) || 0.05;
     // The 20 levels are evenly spaced, so they sit on a linear axis; the
     // summary levels are placed evenly, as their tail levels (0.99, 0.995)
@@ -763,12 +770,13 @@
     svg.append(sv("text", { x: (L + W) / 2, y: H - 3, "text-anchor": "middle", class: "axis" }, "nominal level"));
     svg.append(sv("polygon", { points: bandPoints(xs, X, y => Y(clip(y)), lower, upper), fill: "var(--muted)", opacity: "0.18" }));
     for (const d of lines) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3" }));
+    for (const d of outside) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3", "stroke-dasharray": "4 3" }));
     svg.append(sv("line", { x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: "var(--muted)", "stroke-dasharray": "4 3" }));
     // Coverage cannot exceed 1: the maximum of coverage minus nominal.
     svg.append(sv("polyline", { points: path(levels.map(l => 1 - l <= hi ? 1 - l : null)), fill: "none", stroke: "#D55E00", "stroke-width": "1.5" }));
-    svg.append(sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "2" }));
+    svg.append(sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "1.25" }));
     if (sel) {
-      svg.append(sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "2" }));
+      svg.append(sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "1.5" }));
       xs.forEach((x, k) => {
         if (sel.y[k] === null) return;
         const se = sel.se[k], r = dense ? 2 : 3;
@@ -830,14 +838,14 @@
     svg.append(sv("polygon", { points: area(lower, upper), fill: "var(--muted)", opacity: "0.18" }));
     for (const d of lines) svg.append(sv("polyline", { points: path(d.y), fill: "none", stroke: "var(--muted)", "stroke-width": "1", opacity: "0.3" }));
     svg.append(sv("line", { x1: L, x2: W - R, y1: Y(0), y2: Y(0), stroke: "var(--muted)", "stroke-dasharray": "4 3" }),
-      sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "2" }));
+      sv("polyline", { points: path(median), fill: "none", stroke: "var(--fg)", "stroke-width": "1.25" }));
     if (sel) {
       const lo2 = sel.y.map((v, k) => v === null || sel.se[k] == null ? null : v - 2 * sel.se[k]),
         hi2 = sel.y.map((v, k) => v === null || sel.se[k] == null ? null : v + 2 * sel.se[k]);
       svg.append(sv("polygon", { points: area(lo2, hi2), fill: "var(--accent)", opacity: "0.35" }),
         sv("polyline", { points: path(lo2), fill: "none", stroke: "var(--accent)", "stroke-width": "1", "stroke-dasharray": "3 2" }),
         sv("polyline", { points: path(hi2), fill: "none", stroke: "var(--accent)", "stroke-width": "1", "stroke-dasharray": "3 2" }),
-        sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "2" }));
+        sv("polyline", { points: path(sel.y), fill: "none", stroke: "var(--accent)", "stroke-width": "1.5" }));
     }
     return svg;
   }
