@@ -6,9 +6,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
 > [!NOTE]
-> Version 0.1.1, under active development; the API may change between minor
-> versions. Planned: pretrained checkpoints with model cards, and example
-> notebooks.
+> All 0.x.x releases are under active development and may introduce breaking
+> API changes.
 
 A [BayesFlow](https://github.com/bayesflow-org/bayesflow) add-on for amortized
 Bayesian inference in Item Response Theory (IRT) models: train a network once on
@@ -25,6 +24,7 @@ refitting, for any number of items and persons within the trained range.
   large `n_persons`
 - Optional: calibration-aware training (`CalibratedIRTApproximator`) and
   hyperparameter-optimization hooks (`bayesflow_irt.hpo`)
+- Planned: pretrained checkpoints with model cards, and example notebooks
 
 ## Installation
 
