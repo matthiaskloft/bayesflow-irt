@@ -16,6 +16,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Model card dashboard: the SBC ECDF difference plot draws every in-range
   cell faded behind the chosen one, with their median, as the coverage plot
   does. The sidebar header is set apart from the page tabs.
+- Model card dashboard: with "Show extrapolation cells" on, the coverage and
+  SBC ECDF plots add the out-of-range cells as dashed lines, outside the
+  median and shading. The across-cell line plots share one width and one
+  set of line weights.
+- Model card dashboard: Recovery and Calibration keep the same parameter tab
+  chosen, as they already did the cell.
 
 ### Fixed
 

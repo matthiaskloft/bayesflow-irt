@@ -82,7 +82,9 @@
 
   // ---- Tabs ---------------------------------------------------------------
   // One ARIA tab set: the sidebar (vertical) for pages, a row inside a page.
-  function tabset(listHost, panelHost, defs, label, vertical, prefix) {
+  // onSelect(k), if given, is called when the viewer picks tab k; the
+  // returned object's non-enumerable select(k) switches tabs without it.
+  function tabset(listHost, panelHost, defs, label, vertical, prefix, onSelect) {
     const list = el("div", { role: "tablist", "aria-label": label,
       "aria-orientation": vertical ? "vertical" : "horizontal" });
     listHost.append(list);
@@ -93,11 +95,11 @@
         "aria-selected": k === 0 ? "true" : "false", tabindex: k === 0 ? "0" : "-1", text: name });
       const p = el("section", { role: "tabpanel", id: "tab-" + prefix + id, "aria-labelledby": "tabbtn-" + prefix + id });
       if (k) p.hidden = true;
-      t.addEventListener("click", () => select(k));
+      t.addEventListener("click", () => pick(k));
       t.addEventListener("keydown", e => {
         const n = defs.length;
         const to = { [next]: (k + 1) % n, [prev]: (k - 1 + n) % n, Home: 0, End: n - 1 }[e.key];
-        if (to !== undefined) { e.preventDefault(); select(to); tabs[to].focus(); }
+        if (to !== undefined) { e.preventDefault(); pick(to); tabs[to].focus(); }
       });
       tabs.push(t); list.append(t); panelHost.append(p); out[id] = p;
     });
@@ -109,6 +111,8 @@
       });
       if (vertical) window.scrollTo(0, 0);
     }
+    const pick = k => { select(k); if (onSelect) onSelect(k); };
+    Object.defineProperty(out, "select", { value: select });
     return out;
   }
   const TABS = [["overview", "Overview"], ["model", "Model"], ["recovery", "Recovery"],
@@ -141,11 +145,15 @@
     side.append(el("label", { class: "out-switch", for: "show-out" }, [box,
       el("span", { text: `Show extrapolation cells (${outCells.length})` })]));
   }
-  // Sections inside a page, as a row of tabs.
-  const sub = (page, defs) => {
+  // Sections inside a page, as a row of tabs. Pages given the same link list
+  // keep the same section chosen (the parameter on Recovery and Calibration).
+  const sub = (page, defs, link) => {
     const row = el("div", { class: "subtabs" });
     panels[page].append(row);
-    return tabset(row, panels[page], defs, "Sections", false, page + "-");
+    const set = tabset(row, panels[page], defs, "Sections", false, page + "-",
+      link && (k => link.forEach(s => { if (s !== set) s.select(k); })));
+    if (link) link.push(set);
+    return set;
   };
 
   // ---- Metric page ----------------------------------------------------------
@@ -1049,7 +1057,8 @@
   // Recovery and calibration: one tab per parameter, plus the joint metrics.
   const groups = [...D.parameters.map(p => [p, p]), ["joint", "Joint"]];
   const ofParam = (axis, p) => D.metrics.filter(m => m.axis === axis && m.key.split(".")[0] === p);
-  const rc = sub("recovery", groups), ca = sub("calibration", groups);
+  const paramTabs = [];
+  const rc = sub("recovery", groups, paramTabs), ca = sub("calibration", groups, paramTabs);
   panels.recovery.insertBefore(el("p", { class: "guide",
     text: "True-against-estimate plots need per-dataset estimates, which the record does not store; each metric below summarises them per cell." }),
     panels.recovery.querySelector(".subtabs"));
