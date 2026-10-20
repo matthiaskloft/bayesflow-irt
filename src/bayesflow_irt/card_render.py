@@ -1160,8 +1160,8 @@ def _trained_map(inp: CardInputs, path: Path) -> bool:
         marker="x",
         label="card grid",
     )
-    ax.set_xlabel("persons")
-    ax.set_ylabel("items")
+    ax.set_xlabel("persons (log scale)")
+    ax.set_ylabel("items (log scale)")
     ax.legend(loc="upper right", fontsize=8)
     fig.colorbar(mesh, ax=ax, label="probability per size pair")
     ax.set_title(f"Training sizes ({dist})", fontsize=10)

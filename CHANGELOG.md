@@ -37,6 +37,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   row in the Supported data table, and a square around their grid cross on
   the training-size map, which replaces the table of those cells (only
   failed ones keep a table).
+- Model card: the training-size map marks grid sizes that were not
+  evaluated with a ring, and both its axes say they are on a log scale.
 - Model card dashboard: each item and theta recovery page plots true value
   against posterior mean for the chosen cell, with 95% intervals and misses
   in orange: the first 200 of the record's truth-posterior pairs (one random

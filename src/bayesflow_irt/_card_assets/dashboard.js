@@ -559,17 +559,22 @@
     for (const i of m.grid.items) {
       svg.append(sv("text", { x: L - 5, y: Y(i) + 4, "text-anchor": "end", class: "axis" }, String(i)));
     }
-    svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "persons"),
+    svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "persons (log scale)"),
       sv("text", { x: 12, y: (T + H - B) / 2, "text-anchor": "middle", class: "axis",
-        transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "items"));
-    // Grid sizes evaluated outside the trained range keep the grid cross,
-    // inside a square, as the plots mark extrapolation.
+        transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "items (log scale)"));
+    // Card grid sizes: a cross where evaluated, inside a square outside the
+    // trained range (as the plots mark extrapolation); a faint ring where the
+    // size was not evaluated or failed.
     const extrap = new Set(outCells.filter(c => !c.failed).map(c => c.cell.n_items + "x" + c.cell.n_persons));
     const box = (cx, cy) => sv("rect", { x: cx - 5.5, y: cy - 5.5, width: 11, height: 11, fill: "none", stroke: "var(--fg)", "stroke-width": "1.1" });
+    const cross = (cx, cy) => sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
+      stroke: "var(--fg)", "stroke-width": "1.3" });
+    const ring = (cx, cy) => sv("circle", { cx, cy, r: 3, fill: "none", stroke: "var(--muted)", "stroke-width": "1.1" });
+    let skipped = 0;
     for (const p of m.grid.persons) for (const i of m.grid.items) {
-      const cx = X(p), cy = Y(i);
-      svg.append(sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
-        stroke: "var(--fg)", "stroke-width": "1.3" }));
+      const cx = X(p), cy = Y(i), c = cells.get(i + "x" + p);
+      if (!c || c.failed) { svg.append(ring(cx, cy)); skipped++; continue; }
+      svg.append(cross(cx, cy));
       if (extrap.has(i + "x" + p)) svg.append(box(cx, cy));
     }
     // Legend: shade scale and the grid marker.
@@ -581,11 +586,13 @@
     svg.append(sv("text", { x: lx0 + 16, y: ly0 + 8, class: "axis" }, pmax.toPrecision(2)),
       sv("text", { x: lx0 + 16, y: ly0 + lh, class: "axis" }, "0"),
       sv("text", { x: lx0, y: ly0 + lh + 16, class: "axis" }, "per size pair"),
-      sv("path", { d: `M${lx0 + 3},${ly0 + lh + 31}l6,6m-6,0l6,-6`, stroke: "var(--fg)", "stroke-width": "1.3" }),
-      sv("text", { x: lx0 + 16, y: ly0 + lh + 38, class: "axis" }, "card grid"));
-    if (extrap.size) svg.append(
-      sv("path", { d: `M${lx0 + 3},${ly0 + lh + 49}l6,6m-6,0l6,-6`, stroke: "var(--fg)", "stroke-width": "1.3" }), box(lx0 + 6, ly0 + lh + 52),
-      sv("text", { x: lx0 + 16, y: ly0 + lh + 56, class: "axis" }, "extrapolation"));
+      cross(lx0 + 6, ly0 + lh + 34), sv("text", { x: lx0 + 16, y: ly0 + lh + 38, class: "axis" }, "evaluated"));
+    let ly = ly0 + lh + 52;
+    if (extrap.size) {
+      svg.append(cross(lx0 + 6, ly), box(lx0 + 6, ly), sv("text", { x: lx0 + 16, y: ly + 4, class: "axis" }, "extrapolation"));
+      ly += 18;
+    }
+    if (skipped) svg.append(ring(lx0 + 6, ly), sv("text", { x: lx0 + 16, y: ly + 4, class: "axis" }, "not evaluated"));
     return svg;
   }
 
@@ -1141,10 +1148,7 @@
   // The size map shows which out-of-range sizes were evaluated; only
   // failures, which it cannot show, get a table.
   if (outCells.length) {
-    const skipped = D.axes.items.flatMap(i => D.axes.persons.filter(n => !cells.get(i + "x" + n)
-      && !(D.axes.in_items.includes(i) && D.axes.in_persons.includes(n)))).length;
-    md.envelope.append(el("p", { class: "guide", text: "Boxed crosses: sizes evaluated outside the trained range, shown in the plots and tables when \"Show extrapolation cells\" is on."
-      + (skipped ? ` The other ${skipped} grid size${skipped > 1 ? "s" : ""} outside it ${skipped > 1 ? "were" : "was"} not evaluated.` : "") }));
+    md.envelope.append(el("p", { class: "guide", text: "Boxed crosses: sizes evaluated outside the trained range, shown in the plots and tables when \"Show extrapolation cells\" is on." }));
     const failed = outCells.filter(c => c.failed);
     if (failed.length) md.envelope.append(el("h2", { text: "Extrapolation cells that failed" }),
       table(["Items", "Persons", "Failure"], failed.map(c => [String(c.cell.n_items), String(c.cell.n_persons),
