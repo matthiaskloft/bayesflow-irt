@@ -5,6 +5,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
+> [!NOTE]
+> Version 0.1.1, under active development; the API may change between minor
+> versions. Planned: pretrained checkpoints with model cards, and example
+> notebooks.
+
 A [BayesFlow](https://github.com/bayesflow-org/bayesflow) add-on for amortized
 Bayesian inference in Item Response Theory (IRT) models: train a network once on
 simulated response matrices, then draw posteriors for new data sets without
@@ -96,12 +101,6 @@ python scripts/train_irt.py --config scripts/configs/smoke_1pl.json
 On Windows, run Jupyter with a kernel that imports `torch` first
 ([scripts/ipykernel_torch_preload.py](scripts/ipykernel_torch_preload.py));
 otherwise loading `pyzmq` before `torch` can crash with `WinError 1114`.
-
-## Status
-
-Version 0.1.0, under active development; the API may change between minor
-versions. Planned: pretrained checkpoints with model cards, and example
-notebooks.
 
 ## Development
 
