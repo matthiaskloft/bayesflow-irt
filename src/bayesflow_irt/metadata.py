@@ -253,6 +253,47 @@ def session_info() -> dict[str, Any]:
     }
 
 
+def training_device() -> str:
+    """Name the device this process trains on, for ``training["device"]``.
+
+    Returns
+    -------
+    str
+        ``"GPU: <model>"`` when Keras runs on PyTorch with a CUDA device,
+        otherwise ``"CPU: <model>"``. Like :func:`session_info` it names the
+        hardware only, never the hostname, as it is published with a model
+        card.
+    """
+    import keras
+
+    if keras.backend.backend() == "torch":
+        import torch
+
+        if torch.cuda.is_available():
+            return f"GPU: {torch.cuda.get_device_name(0)}"
+    return f"CPU: {_cpu_model()}"
+
+
+def _cpu_model() -> str:
+    """The CPU model name: /proc/cpuinfo on Linux, the registry on Windows,
+    else :mod:`platform`."""
+    try:
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    try:
+        import winreg
+
+        key = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key) as k:
+            return str(winreg.QueryValueEx(k, "ProcessorNameString")[0]).strip()
+    except (ImportError, OSError):
+        pass
+    return platform.processor() or platform.machine() or "unknown"
+
+
 def _sha256_file(path: str | Path) -> str:
     """Return the hex SHA-256 of a file, read in 1 MiB chunks."""
     digest = hashlib.sha256()

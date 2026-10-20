@@ -1228,6 +1228,13 @@ def _reference_section(inp: CardInputs) -> list[str]:
     return md
 
 
+def _variant_label(variant: Any) -> str:
+    """The prior variant for a title: ``"fixed"`` reads ``"fixed prior"``."""
+    if variant in ("fixed", "variable"):
+        return f"{variant} prior"
+    return _or_unrecorded(variant)
+
+
 def render_markdown(inp: CardInputs, figures: dict[str, str] | None = None) -> str:
     """The Markdown card; ``figures`` maps figure keys to relative paths."""
     figures = figures or {}
@@ -1235,7 +1242,7 @@ def render_markdown(inp: CardInputs, figures: dict[str, str] | None = None) -> s
     family = str(spec.get("model", "")).lower()
     md: list[str] = [
         f"# Model card: {_or_unrecorded(spec.get('model'))} "
-        f"({_or_unrecorded(spec.get('variant'))})",
+        f"({_variant_label(spec.get('variant'))})",
         "",
         *(f"> **{b}**\n" for b in status_banners(inp)),
         _identity(inp),

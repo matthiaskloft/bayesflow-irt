@@ -530,7 +530,7 @@
   // card's evaluation grid as crosses. Shade: square root of the share of
   // the largest bin, so the long tail stays visible.
   function sizeMap(m) {
-    const W = 560, H = 330, L = 44, R = 96, T = 24, B = 38;
+    const W = 572, H = 330, L = 44, R = 108, T = 24, B = 38;
     const ie = m.items.edges, pe = m.persons.edges;
     // The axes also reach grid cells outside the trained range (left blank).
     const lx = Math.log, pad = 0.12;
@@ -562,15 +562,15 @@
     svg.append(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis" }, "persons"),
       sv("text", { x: 12, y: (T + H - B) / 2, "text-anchor": "middle", class: "axis",
         transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "items"));
-    // Grid sizes evaluated outside the trained range: a square, as in the
-    // plots, in place of the cross.
+    // Grid sizes evaluated outside the trained range keep the grid cross,
+    // inside a square, as the plots mark extrapolation.
     const extrap = new Set(outCells.filter(c => !c.failed).map(c => c.cell.n_items + "x" + c.cell.n_persons));
+    const box = (cx, cy) => sv("rect", { x: cx - 5.5, y: cy - 5.5, width: 11, height: 11, fill: "none", stroke: "var(--fg)", "stroke-width": "1.1" });
     for (const p of m.grid.persons) for (const i of m.grid.items) {
       const cx = X(p), cy = Y(i);
-      svg.append(extrap.has(i + "x" + p)
-        ? sv("rect", { x: cx - 3.5, y: cy - 3.5, width: 7, height: 7, fill: "none", stroke: "var(--fg)", "stroke-width": "1.3" })
-        : sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
-          stroke: "var(--fg)", "stroke-width": "1.3" }));
+      svg.append(sv("path", { d: `M${cx - 3},${cy - 3}L${cx + 3},${cy + 3}M${cx - 3},${cy + 3}L${cx + 3},${cy - 3}`,
+        stroke: "var(--fg)", "stroke-width": "1.3" }));
+      if (extrap.has(i + "x" + p)) svg.append(box(cx, cy));
     }
     // Legend: shade scale and the grid marker.
     const lx0 = W - R + 18, ly0 = T + 8, lh = 120;
@@ -583,7 +583,8 @@
       sv("text", { x: lx0, y: ly0 + lh + 16, class: "axis" }, "per size pair"),
       sv("path", { d: `M${lx0 + 3},${ly0 + lh + 31}l6,6m-6,0l6,-6`, stroke: "var(--fg)", "stroke-width": "1.3" }),
       sv("text", { x: lx0 + 16, y: ly0 + lh + 38, class: "axis" }, "card grid"));
-    if (extrap.size) svg.append(sv("rect", { x: lx0 + 2.5, y: ly0 + lh + 47.5, width: 7, height: 7, fill: "none", stroke: "var(--fg)", "stroke-width": "1.3" }),
+    if (extrap.size) svg.append(
+      sv("path", { d: `M${lx0 + 3},${ly0 + lh + 49}l6,6m-6,0l6,-6`, stroke: "var(--fg)", "stroke-width": "1.3" }), box(lx0 + 6, ly0 + lh + 52),
       sv("text", { x: lx0 + 16, y: ly0 + lh + 56, class: "axis" }, "extrapolation"));
     return svg;
   }
@@ -1067,7 +1068,12 @@
     for (const g of names) md.npe.append(el("h3", { text: g }), table(["Setting", "Value"], archGroups[g].sort((a, b) => a[0].localeCompare(b[0]))));
     md.npe.append(el("p", { class: "guide", text: "Settings as recorded in the metadata sidecar. Settings left at their library defaults are listed only if the training script recorded them." }));
   }
-  md.training.append(el("h2", { text: "Training" }), kv(D.training));
+  // The device as "GPU: <model>" or "CPU: <model>" (training_device()); older
+  // records hold a bare GPU name, labelled here.
+  const device = v => typeof v !== "string" || /^(GPU|CPU):/.test(v) ? v
+    : /NVIDIA|GeForce|RTX|Tesla|Quadro|Radeon|\b[AHLV]\d{2,3}\b/i.test(v) ? "GPU: " + v : v;
+  md.training.append(el("h2", { text: "Training" }),
+    kv(D.training && "device" in D.training ? { ...D.training, device: device(D.training.device) } : D.training));
   md.provenance.append(el("h2", { text: "Identity" }), table(["Field", "Value"], D.identity),
     el("h2", { text: "Protocol, session and sidecar provenance" }),
     el("pre", { text: JSON.stringify(D.provenance, null, 1) }));
@@ -1104,8 +1110,10 @@
   }
   // References each page relies on, at its end.
   for (const [page, list] of Object.entries(D.references || {})) {
-    if (!panels[page] || !list.length) continue;
-    panels[page].append(el("section", { class: "refs" }, [el("h2", { text: "References" }),
+    // A Model section's references (irt, npe) go under that section only.
+    const host = panels[page] || md[page];
+    if (!host || !list.length) continue;
+    host.append(el("section", { class: "refs" }, [el("h2", { text: "References" }),
       el("ul", {}, list.map(r => el("li", {}, [el("strong", { text: r.topic + ": " }),
         ...r.text.split("*").map((part, k) => k % 2 ? el("em", { text: part }) : part)])))]));
   }

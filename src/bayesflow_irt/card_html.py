@@ -35,6 +35,7 @@ from .card_render import (
     _or_unrecorded,
     _priors,
     _usage,
+    _variant_label,
     bin_coverage,
     card_metrics_for,
     status_banners,
@@ -216,7 +217,10 @@ _PAGE_REFS = {
         ("Monte Carlo standard errors", "morris"),
         ("Colour palette", "okabe"),
     ],
-    "model": [("Neural posterior estimation (BayesFlow)", "bayesflow")],
+    # Model page references sit under their own section (the "irt" and
+    # "npe" sub-tabs), not under every section of the page.
+    "irt": [],
+    "npe": [("Neural posterior estimation (BayesFlow)", "bayesflow")],
     "recovery": [
         ("Monte Carlo standard errors", "morris"),
         ("Posterior contraction", "bayesflow"),
@@ -246,7 +250,7 @@ def page_references(family: str) -> dict[str, list[dict[str, str]]]:
         for page, pairs in _PAGE_REFS.items()
     }
     if family in _FAMILY_REFS:
-        out["model"].insert(
+        out["irt"].insert(
             0,
             {
                 "topic": f"{family.upper()} response model",
@@ -704,7 +708,7 @@ def dashboard_payload(inp: CardInputs, fig_dir: Path | None = None) -> dict[str,
                 figures[name] = uri
     return {
         "title": f"Model card: {_or_unrecorded(spec.get('model'))} "
-        f"({_or_unrecorded(spec.get('variant'))})",
+        f"({_variant_label(spec.get('variant'))})",
         "identity": _md_table_rows(_identity(inp)),
         "pill": _or_unrecorded(ck.get("match")),
         "banners": status_banners(inp),

@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- `training_device()`, the training device as `"GPU: <model>"` or
+  `"CPU: <model>"` for `training["device"]`, without the hostname.
+
 ### Changed
+
+- Model card: the title names the prior variant as "fixed prior" or
+  "variable prior". The model's references sit under their own Model section
+  ("IRT model", "NPE architecture") instead of under every section. The
+  dashboard labels a bare GPU name in older records' device as "GPU: ...".
 
 - Model card dashboard: the calibration view shows one coverage plot instead
   of two. The across-cells coverage plot now uses the 20 levels the
@@ -24,7 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   chosen, as they already did the cell.
 - Model card dashboard: cells evaluated outside the trained range show up in
   the supported data: an "Extrapolation evaluated" tile on the Overview, a
-  row in the Supported data table, and squares on the training-size map. The
+  row in the Supported data table, and a square around their grid cross on
+  the training-size map. The
   recovery note under the size pills now says the record keeps the
   truth-posterior pairs, which the card does not plot yet.
 
