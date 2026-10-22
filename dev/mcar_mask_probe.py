@@ -108,7 +108,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--trials', type=int, default=20000)
     parser.add_argument('--seed', type=int, default=20261021)
-    parser.add_argument('--fresh', action='store_true', help='Ignore saved same-seed results')
+    parser.add_argument(
+        '--fresh', action='store_true', help='Ignore saved same-seed results'
+    )
     args = parser.parse_args()
     checked = verify_edges()
     output = Path(__file__).resolve().with_name('mcar_mask_probe_results.csv')
@@ -130,7 +132,9 @@ def main():
                                 converted[key] = int(value)
                             else:
                                 converted[key] = float(value)
-                        cache[(int(row['n']), int(row['j']), int(row['k_total']))] = converted
+                        cache[
+                            (int(row['n']), int(row['j']), int(row['k_total']))
+                        ] = converted
     cases = []
     # User's relevant training-size range; cross all representative sizes.
     for n in (10, 20, 50, 100, 1000):
@@ -170,12 +174,17 @@ def main():
             trials = min(args.trials, max(2000, 100_000_000 // (n*j)))
             if key in cache and cache[key]['trials'] >= trials:
                 records.append(cache[key])
-                print(f'{n}x{j} rho={rho:.4f}: reused {cache[key]["trials"]} trials', flush=True)
+                print(
+                    f'{n}x{j} rho={rho:.4f}: reused {cache[key]["trials"]} trials',
+                    flush=True,
+                )
                 continue
             k, r = divmod(k_total, n)
             expected_empty = j * (k / j) ** (n - r) * ((k + 1) / j) ** r
             p_exact = exact_acceptance(n, j, k_total)
-            rng = np.random.default_rng(np.random.SeedSequence([args.seed, n, j, k_total]))
+            rng = np.random.default_rng(
+                np.random.SeedSequence([args.seed, n, j, k_total])
+            )
             success = empty_sum = 0
             batch_max = min(512, max(1, 2_000_000 // (n * j)))
             start = time.perf_counter()
@@ -210,18 +219,29 @@ def main():
         writer.writerows(records)
     metadata = dict(seed=args.seed, max_trials_per_feasible_case=args.trials,
                     trial_budget='min(max_trials, max(2000, 100_000_000 // (N*J)))',
-                    cache='Reuse matching-seed cells with at least the requested trial budget',
-                    python=sys.version, numpy=np.__version__, platform=platform.platform(),
-                    processor=platform.processor(), witness_cases_checked=checked,
-                    total_simulation_seconds=sum(r.get('experiment_seconds', 0) for r in records),
+                    cache=('Reuse matching-seed cells with at least the requested '
+                           'trial budget'),
+                    python=sys.version, numpy=np.__version__,
+                    platform=platform.platform(),
+                    processor=platform.processor(),
+                    witness_cases_checked=checked,
+                    total_simulation_seconds=sum(
+                        r.get('experiment_seconds', 0) for r in records
+                    ),
                     rounding='Python round: nearest, ties to even',
                     interval='95% Wilson, per cell, not simultaneous',
-                    timing='Batched CPU NumPy full-mask proposal + coverage check; no retries; '
-                           'projected accepted cost = measured proposal cost / exact acceptance',
-                    row_assignment='Uniform independent permutation of balanced row counts per mask',
-                    mask_independence='No responses or model parameters are generated or read',
-                    analytic='Integer inclusion-exclusion exact rational converted to float')
-    output.with_suffix('.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
+                    timing=('Batched CPU NumPy full-mask proposal + coverage check; '
+                            'no retries; projected accepted cost = measured '
+                            'proposal cost / exact acceptance'),
+                    row_assignment=('Uniform independent permutation of balanced '
+                                    'row counts per mask'),
+                    mask_independence=('No responses or model parameters are '
+                                       'generated or read'),
+                    analytic=('Integer inclusion-exclusion exact rational converted '
+                              'to float'))
+    output.with_suffix('.json').write_text(
+        json.dumps(metadata, indent=2), encoding='utf-8'
+    )
     print(output)
 
 
