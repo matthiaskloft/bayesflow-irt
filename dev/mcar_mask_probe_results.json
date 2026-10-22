@@ -1,0 +1,18 @@
+{
+  "seed": 20261021,
+  "max_trials_per_feasible_case": 20000,
+  "trial_budget": "min(max_trials, max(2000, 100_000_000 // (N*J)))",
+  "cache": "Reuse matching-seed cells with at least the requested trial budget",
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "numpy": "2.4.2",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "processor": "AMD64 Family 23 Model 113 Stepping 0, AuthenticAMD",
+  "witness_cases_checked": 988,
+  "total_simulation_seconds": 72.08617150026839,
+  "rounding": "Python round: nearest, ties to even",
+  "interval": "95% Wilson, per cell, not simultaneous",
+  "timing": "Batched CPU NumPy full-mask proposal + coverage check; no retries; projected accepted cost = measured proposal cost / exact acceptance",
+  "row_assignment": "Uniform independent permutation of balanced row counts per mask",
+  "mask_independence": "No responses or model parameters are generated or read",
+  "analytic": "Integer inclusion-exclusion exact rational converted to float"
+}
