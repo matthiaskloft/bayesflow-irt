@@ -1857,7 +1857,7 @@ def _mock_2pl_approx(n_sims=4, n_samples=8, n_items=3):
     """An approximator whose draws match whatever conditions it is given."""
     mock_approx = MagicMock()
 
-    def _sample(conditions, num_samples):
+    def _sample(conditions, num_samples, **_):
         b, i = np.asarray(conditions["a"]).shape
         rng = np.random.default_rng(0)
         return {
