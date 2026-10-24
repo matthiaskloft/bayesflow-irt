@@ -44,6 +44,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+import weakref
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, NamedTuple
@@ -51,6 +52,7 @@ from typing import Any, Literal, NamedTuple
 import keras
 import numpy as np
 
+from .evaluation import sample_posterior
 from .sbc import CLASSICAL_REFERENCE_COORDS
 from .utils import (
     _PeriodicCudaCacheRelease,
@@ -1980,6 +1982,7 @@ def make_irt_hooks(
     memory_config: dict[str, Any] | None = None,
     joint_metrics: Mapping[str, JointMetricFn] | None = None,
     flow_sample_kwargs: Mapping[str, Any] | None = None,
+    validation_chunk_size: int | Literal["auto"] = "auto",
     run_pipeline_check: bool = False,
     item_posterior: str | Sequence[str] = "flow_matching",
 ) -> IRTHooks:
@@ -2339,6 +2342,14 @@ def make_irt_hooks(
 
         Setting this changes what a trial's score means, so a study run with it
         is not comparable with one run without it. Start a new study.
+    validation_chunk_size : int or "auto"
+        Datasets per ``sample`` call during validation, through
+        :func:`bayesflow_irt.evaluation.sample_posterior`, the driver the
+        model card uses. Each chunk goes to the item posterior as one batch
+        of rows (``batch_flow_rows=True``), so the GPU sees a few large
+        calls instead of one call per 256 rows. ``"auto"`` (default) sizes
+        chunks from free device memory with a two-probe measurement; an
+        out-of-memory chunk shrinks and is retried.
     run_pipeline_check : bool
         If ``True``, run ``bayesflow_hpo.pipeline.check_pipeline()`` on the
         constructed hooks before returning — a fast (1 epoch, 1 batch)
@@ -2366,6 +2377,15 @@ def make_irt_hooks(
     IRTHooks
     """
     _require_bayesflow_hpo()
+    if validation_chunk_size != "auto" and (
+        isinstance(validation_chunk_size, bool)
+        or not isinstance(validation_chunk_size, int)
+        or validation_chunk_size < 1
+    ):
+        raise ValueError(
+            "validation_chunk_size must be a positive int or 'auto'; got "
+            f"{validation_chunk_size!r}."
+        )
 
     memory_config = {**DEFAULT_TRIAL_MEMORY_CONFIG, **(memory_config or {})}
     unknown = set(memory_config) - set(DEFAULT_TRIAL_MEMORY_CONFIG)
@@ -2750,6 +2770,9 @@ def make_irt_hooks(
                 result.person_chunk_size,
             )
 
+    # Chunk size per model and corner, chosen on the model's first validation.
+    _probed_chunks: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
     def _validate_fn(
         approximator: Any,
         _validation_data_unused: Any,
@@ -2799,11 +2822,21 @@ def make_irt_hooks(
                 != "autoregressive_coupling_flow"
             ):
                 sample_kwargs["flow_sample_kwargs"] = flow_sample_kwargs
-            posterior = approximator.sample(
-                conditions=corner_batch,
-                num_samples=n_posterior_samples,
-                **sample_kwargs,
+            # The memory probe runs once per corner and model: later
+            # validations of the same trial reuse the size it chose (after
+            # any out-of-memory shrink).
+            sizes = _probed_chunks.setdefault(approximator, {})
+            result = sample_posterior(
+                approximator,
+                corner_batch,
+                n_posterior_samples,
+                param_keys,
+                chunk_size=sizes.get(cond_id, validation_chunk_size),
+                batch_flow_rows=True,
+                sample_kwargs=sample_kwargs,
             )
+            sizes[cond_id] = result.final_chunk_size
+            posterior = result.draws
 
             for key in param_keys:
                 true_vals = np.asarray(corner_batch[key])
