@@ -334,10 +334,10 @@ def sample_posterior(
     t0 = time.perf_counter()
     chunk_rule = None
     if chunk_size == "auto":
-        chunk_size, chunk_rule = _auto_chunk_size(
-            lambda k: run(n - k, n), n, memory_share
-        )
-    size = chunk_size
+        first, chunk_rule = _auto_chunk_size(lambda k: run(n - k, n), n, memory_share)
+    else:
+        first = int(chunk_size)
+    size = first
     start = 0
     while start < n:
         stop = min(start + size, n)
@@ -378,7 +378,7 @@ def sample_posterior(
         draws=draws,
         retries=retries,
         seconds=time.perf_counter() - t0,
-        chunk_size=chunk_size,
+        chunk_size=first,
         final_chunk_size=size,
         autoregressive_rows=(
             None
