@@ -14,8 +14,8 @@ authors:
     affiliation: "Leibniz Institute for Educational Trajectories (LIfBi)"
 repository-code: "https://github.com/matthiaskloft/bayesflow-irt"
 license: MIT
-version: "0.1.1"
-date-released: "2026-10-20"
+version: "0.2.0"
+date-released: "2026-10-24"
 keywords:
   - item response theory
   - amortized Bayesian inference
