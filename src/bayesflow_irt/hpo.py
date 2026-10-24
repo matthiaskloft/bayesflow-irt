@@ -44,6 +44,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+import weakref
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, NamedTuple
@@ -2769,6 +2770,9 @@ def make_irt_hooks(
                 result.person_chunk_size,
             )
 
+    # Chunk size per model and corner, chosen on the model's first validation.
+    _probed_chunks: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
     def _validate_fn(
         approximator: Any,
         _validation_data_unused: Any,
@@ -2818,15 +2822,21 @@ def make_irt_hooks(
                 != "autoregressive_coupling_flow"
             ):
                 sample_kwargs["flow_sample_kwargs"] = flow_sample_kwargs
-            posterior = sample_posterior(
+            # The memory probe runs once per corner and model: later
+            # validations of the same trial reuse the size it chose (after
+            # any out-of-memory shrink).
+            sizes = _probed_chunks.setdefault(approximator, {})
+            result = sample_posterior(
                 approximator,
                 corner_batch,
                 n_posterior_samples,
                 param_keys,
-                chunk_size=validation_chunk_size,
+                chunk_size=sizes.get(cond_id, validation_chunk_size),
                 batch_flow_rows=True,
                 sample_kwargs=sample_kwargs,
-            ).draws
+            )
+            sizes[cond_id] = result.final_chunk_size
+            posterior = result.draws
 
             for key in param_keys:
                 true_vals = np.asarray(corner_batch[key])

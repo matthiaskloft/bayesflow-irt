@@ -190,6 +190,9 @@ class PosteriorDraws:
         Wall time spent sampling, including the memory probe.
     chunk_size : int
         Datasets per ``sample`` call before any retry.
+    final_chunk_size : int
+        Datasets per call after the last out-of-memory shrink, a safe size
+        to reuse for the same data shape.
     autoregressive_rows : str or None
         For an autoregressive item posterior, ``"whole chunk"`` or
         ``"at most <k>"`` after a row-batch shrink; ``None`` otherwise.
@@ -201,6 +204,7 @@ class PosteriorDraws:
     retries: list[dict[str, Any]] = field(default_factory=list)
     seconds: float = 0.0
     chunk_size: int = 0
+    final_chunk_size: int = 0
     autoregressive_rows: str | None = None
     chunk_rule: dict[str, Any] | None = None
 
@@ -256,7 +260,9 @@ def sample_posterior(
     seed : int, optional
         Base posterior seed, reset per chunk; ``None`` leaves the RNG alone.
     batch_flow_rows : bool
-        Pass a flow-matching chunk as one batch of conditions and draws.
+        Pass a flow-matching chunk as one batch of conditions and draws. If
+        one dataset does not fit that way, the remaining datasets fall back
+        to the approximator's default row chunks (``retry_rows="default"``).
     sample_kwargs : mapping, optional
         Extra keyword arguments for every ``sample`` call (for example
         ``flow_sample_kwargs``).
@@ -275,7 +281,11 @@ def sample_posterior(
     """
     from .utils import is_oom_error, safe_empty_cache
 
-    if chunk_size != "auto" and (not isinstance(chunk_size, int) or chunk_size < 1):
+    if chunk_size != "auto" and (
+        isinstance(chunk_size, bool)
+        or not isinstance(chunk_size, int)
+        or chunk_size < 1
+    ):
         raise ValueError(f"chunk_size must be >= 1 or 'auto'; got {chunk_size!r}.")
     if not 0 < memory_share <= 1:
         raise ValueError(f"memory_share must be in (0, 1]; got {memory_share}.")
@@ -289,6 +299,9 @@ def sample_posterior(
     retries: list[dict[str, Any]] = []
     # Cap on an autoregressive row batch; None is the whole chunk.
     row_cap: int | None = None
+    # Set when one dataset does not fit as one flow-matching batch: the rest
+    # is sampled at the approximator's own row chunks.
+    flow_unbatched = False
 
     def run(start: int, stop: int) -> None:
         if seed is not None:
@@ -300,7 +313,7 @@ def sample_posterior(
             extra["condition_chunk_size"] = (
                 rows if row_cap is None else min(rows, row_cap)
             )
-        elif batch_flow:
+        elif batch_flow and not flow_unbatched:
             extra["condition_chunk_size"] = (stop - start) * n_items
             extra["sample_chunk_size"] = num_samples
         post = approximator.sample(conditions=chunk, num_samples=num_samples, **extra)
@@ -343,6 +356,13 @@ def sample_posterior(
         safe_empty_cache()
         record: dict[str, Any] = {"start": start, "size": stop - start}
         if stop - start < 2:
+            if batch_flow and not flow_unbatched:
+                # One dataset does not fit as one ODE batch: fall back to the
+                # approximator's default row chunks for the remaining datasets.
+                flow_unbatched = True
+                record["retry_rows"] = "default"
+                retries.append(record)
+                continue
             rows = num_samples if row_cap is None else row_cap
             if not autoregressive or rows < 2:
                 raise failed(record, oom)
@@ -359,6 +379,7 @@ def sample_posterior(
         retries=retries,
         seconds=time.perf_counter() - t0,
         chunk_size=chunk_size,
+        final_chunk_size=size,
         autoregressive_rows=(
             None
             if not autoregressive

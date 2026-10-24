@@ -23,15 +23,19 @@ def _data(n=10, n_items=4, n_persons=6, seed=0):
 class RowwiseApproximator:
     """Draws that depend only on each dataset's own truth: chunking-invariant."""
 
-    def __init__(self, autoregressive=False, max_chunk=None):
+    def __init__(self, autoregressive=False, max_chunk=None, max_rows=None):
         self.autoregressive = autoregressive
         self.max_chunk = max_chunk
+        self.max_rows = max_rows
         self.calls = []
 
     def sample(self, conditions, num_samples, **kwargs):
         n = conditions["a"].shape[0]
         self.calls.append((n, kwargs))
-        if self.max_chunk is not None and n > self.max_chunk:
+        rows = kwargs.get("condition_chunk_size", 0)
+        if (self.max_chunk is not None and n > self.max_chunk) or (
+            self.max_rows is not None and rows > self.max_rows
+        ):
             raise torch.cuda.OutOfMemoryError("CUDA out of memory (fake)")
         z = np.linspace(-2, 2, num_samples)[None, :, None]
         return {
@@ -81,7 +85,62 @@ def test_out_of_memory_shrinks_and_keeps_the_draws():
         sample_posterior(RowwiseApproximator(max_chunk=0), data, 5, ["b"], chunk_size=2)
 
 
-@pytest.mark.parametrize("bad", [0, -1, 1.5, "big"])
+def test_autoregressive_row_batch_shrinks_for_one_dataset():
+    data = _data()
+    ref = sample_posterior(RowwiseApproximator(), data, 8, ["b"], chunk_size=10)
+    fake = RowwiseApproximator(autoregressive=True, max_rows=5)
+    res = sample_posterior(fake, data, 8, ["b"], chunk_size=1)
+    # 8 rows -> 6 -> 4 (CHUNK_SHRINK), then every dataset fits.
+    assert [r["retry_rows"] for r in res.retries] == [6, 4]
+    assert res.autoregressive_rows == "at most 4"
+    np.testing.assert_array_equal(res.draws["b"], ref.draws["b"])
+
+
+def test_batched_flow_falls_back_to_default_rows():
+    data = _data(n_items=4)
+    ref = sample_posterior(RowwiseApproximator(), data, 8, ["b"], chunk_size=10)
+    fake = RowwiseApproximator(max_rows=3)
+    res = sample_posterior(fake, data, 8, ["b"], chunk_size=2, batch_flow_rows=True)
+    assert res.retries[-1]["retry_rows"] == "default"
+    assert res.final_chunk_size == 1
+    assert "condition_chunk_size" not in fake.calls[-1][1]
+    np.testing.assert_array_equal(res.draws["b"], ref.draws["b"])
+
+
+def test_auto_probes_device_memory(monkeypatch):
+    """The CUDA probe path, with torch.cuda's memory counters stubbed."""
+    import bayesflow_irt.evaluation as ev
+
+    mib = 2**20
+    state = {"peak": 0}
+    fake = RowwiseApproximator()
+    original = fake.sample
+
+    def sample(conditions, num_samples, **kwargs):
+        state["peak"] = conditions["a"].shape[0] * 10 * mib
+        return original(conditions, num_samples, **kwargs)
+
+    fake.sample = sample
+    monkeypatch.setattr(ev, "_torch_cuda", lambda: True)
+    for name, value in {
+        "memory_allocated": lambda: 0,
+        "memory_reserved": lambda: 0,
+        "reset_peak_memory_stats": lambda: None,
+        "max_memory_allocated": lambda: state["peak"],
+        "mem_get_info": lambda: (50 * mib, 100 * mib),
+        "get_device_name": lambda: "fake",
+    }.items():
+        monkeypatch.setattr(torch.cuda, name, value)
+    data = _data(n=10)
+    ref = sample_posterior(RowwiseApproximator(), data, 5, ["b"], chunk_size=10)
+    res = sample_posterior(fake, data, 5, ["b"], chunk_size="auto")
+    # 10 MiB per dataset, 0.8 of 50 MiB free: 4 datasets per chunk.
+    assert res.chunk_size == 4
+    assert res.chunk_rule["mib_per_dataset"] == 10
+    np.testing.assert_array_equal(res.draws["b"], ref.draws["b"])
+
+
+@pytest.mark.parametrize("bad", [0, -1, 1.5, "big", True])
 def test_rejects_bad_chunk_size(bad):
     with pytest.raises(ValueError, match="chunk_size"):
         sample_posterior(RowwiseApproximator(), _data(), 5, ["b"], chunk_size=bad)
@@ -207,6 +266,15 @@ def test_validation_matches_the_metric_on_one_shot_draws():
                 fn(draws_flat, np.asarray(corner[key]).reshape(-1))["calibration_error"]
             )
     assert result["calibration_error/worst"] == pytest.approx(max(values))
+
+
+def test_validation_reuses_the_chunk_size_per_corner():
+    hooks = _hooks(3)
+    fake = RowwiseApproximator()
+    hooks.validate_fn(fake, None, 20)
+    first = len(fake.calls)
+    hooks.validate_fn(fake, None, 20)
+    assert len(fake.calls) == 2 * first
 
 
 @pytest.mark.parametrize("bad", [0, True, "big"])
