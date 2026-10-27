@@ -1784,6 +1784,7 @@ def trained_2pl_approximator():
     approximator = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=inference_net,
+        item_posterior="flow_matching",
         summary_network=summary_net,
     )
     approximator.compile(optimizer="adam")
@@ -1827,6 +1828,7 @@ def trained_pcm_approximator():
     approximator = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=inference_net,
+        item_posterior="flow_matching",
         summary_network=summary_net,
     )
     approximator.compile(optimizer="adam")
@@ -1875,6 +1877,7 @@ def trained_gpcm_approximator():
     approximator = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=inference_net,
+        item_posterior="flow_matching",
         summary_network=summary_net,
     )
     approximator.compile(optimizer="adam")
@@ -2266,6 +2269,7 @@ class TestPersonScorerIntegration:
         loading_approx = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=inference_net,
+            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         loading_approx.compile(optimizer="adam")

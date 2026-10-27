@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- `EquivariantIRTApproximator` and `make_irt_hooks` default to
+  `item_posterior="autoregressive_coupling_flow"`, which needs a
+  `CouplingFlow` inference network. Code that passes `FlowMatching` without
+  `item_posterior` now raises a `TypeError`; pass
+  `item_posterior="flow_matching"` to keep it.
+
+### Deprecated
+
+- `item_posterior="flow_matching"` emits a `DeprecationWarning` and will be
+  removed in a future release. In a 2PL comparison it was less calibrated
+  than the autoregressive coupling flow, samples items independently (so
+  functionals across items come out too narrow), and ran out of GPU memory
+  in evaluation (#20). Checkpoints saved with it still load, including ones
+  saved before `item_posterior` existed, and loading one does not warn.
+  `standardize_params=True` still requires it. `CalibratedIRTApproximator`
+  supports only flow matching, keeps it as its default and does not warn.
+
 ## [0.2.0] - 2026-10-24
 
 ### Added

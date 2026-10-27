@@ -1,5 +1,7 @@
 """Tests for the autoregressive item posterior of ``EquivariantIRTApproximator``."""
 
+import warnings
+
 import bayesflow as bf
 import keras
 import numpy as np
@@ -63,15 +65,53 @@ def built(request):
     return simulator, approximator
 
 
-def test_default_is_flow_matching():
+def test_default_is_autoregressive():
+    simulator = _simulator()
+    approximator = EquivariantIRTApproximator(
+        adapter=make_2pl_adapter(simulator),
+        summary_network=MatrixEquivariantIRTSummary(embed_dim=8),
+        inference_network=bf.networks.CouplingFlow(depth=2),
+    )
+    assert approximator.item_posterior == _AR
+    assert approximator.draws_summary is not None
+
+
+def test_default_rejects_flow_matching_network():
+    simulator = _simulator()
+    with pytest.raises(TypeError, match="item_posterior='flow_matching'"):
+        EquivariantIRTApproximator(
+            adapter=make_2pl_adapter(simulator),
+            summary_network=MatrixEquivariantIRTSummary(embed_dim=8),
+            inference_network=bf.networks.FlowMatching(),
+        )
+
+
+def test_flow_matching_is_deprecated():
+    simulator = _simulator()
+    with pytest.warns(DeprecationWarning, match="flow_matching"):
+        approximator = EquivariantIRTApproximator(
+            adapter=make_2pl_adapter(simulator),
+            summary_network=MatrixEquivariantIRTSummary(embed_dim=8),
+            inference_network=bf.networks.FlowMatching(),
+            item_posterior="flow_matching",
+        )
+    assert approximator.draws_summary is None
+
+
+def test_config_without_item_posterior_loads_as_flow_matching():
     simulator = _simulator()
     approximator = EquivariantIRTApproximator(
         adapter=make_2pl_adapter(simulator),
         summary_network=MatrixEquivariantIRTSummary(embed_dim=8),
         inference_network=bf.networks.FlowMatching(),
+        item_posterior="flow_matching",
     )
-    assert approximator.item_posterior == "flow_matching"
-    assert approximator.draws_summary is None
+    config = approximator.get_config()
+    del config["item_posterior"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        restored = EquivariantIRTApproximator.from_config(config)
+    assert restored.item_posterior == "flow_matching"
 
 
 def test_invalid_item_posterior():

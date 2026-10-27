@@ -824,6 +824,7 @@ def _build_probe_approximator(approximator):
         draws_summary_hidden_dim=getattr(approximator, "draws_summary_hidden_dim", 32),
         draws_summary_dim=getattr(approximator, "draws_summary_dim", 32),
         draws_summary_num_heads=getattr(approximator, "draws_summary_num_heads", 4),
+        _warn_deprecated=False,
     )
     clone.compile(optimizer="adam")
     return clone

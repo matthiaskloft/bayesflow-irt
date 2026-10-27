@@ -2,7 +2,7 @@
 
 Builds ``bayesflow.adapters.Adapter`` pipelines that map simulator dictionaries
 into the ``inference_variables`` / ``summary_variables`` / ``inference_conditions``
-schema expected by ``EquivariantIRTApproximator`` with ``FlowMatching``.
+schema expected by ``EquivariantIRTApproximator``.
 """
 
 from __future__ import annotations

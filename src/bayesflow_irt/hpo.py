@@ -1984,7 +1984,7 @@ def make_irt_hooks(
     flow_sample_kwargs: Mapping[str, Any] | None = None,
     validation_chunk_size: int | Literal["auto"] = "auto",
     run_pipeline_check: bool = False,
-    item_posterior: str | Sequence[str] = "flow_matching",
+    item_posterior: str | Sequence[str] = "autoregressive_coupling_flow",
 ) -> IRTHooks:
     """Create HPO hooks for an IRT model.
 
@@ -2361,9 +2361,11 @@ def make_irt_hooks(
         (e.g. in a test suite calling ``make_irt_hooks`` repeatedly).
     item_posterior : str or sequence of str
         Item-posterior factorization of the built approximators (see
-        :class:`~bayesflow_irt.EquivariantIRTApproximator`). With
-        ``"autoregressive_coupling_flow"`` the inference space must be an
-        :class:`AutoregressiveCouplingFlowSpace` (the default then), whose
+        :class:`~bayesflow_irt.EquivariantIRTApproximator`). Defaults to
+        ``"autoregressive_coupling_flow"``; ``"flow_matching"`` is
+        deprecated. With ``"autoregressive_coupling_flow"`` the inference
+        space must be an :class:`AutoregressiveCouplingFlowSpace` (the
+        default then), whose
         draws-summary dimensions are searched alongside the coupling flow's,
         and ``flow_sample_kwargs`` must be unset. A list of two or more
         families searches the factorization as a categorical
@@ -2690,12 +2692,11 @@ def make_irt_hooks(
             person_chunk_size=memory_config["person_chunk_size"],
         )
         trial_posterior = hparams["item_posterior"] if searched else item_posterior
-        item_kwargs: dict[str, Any] = {}
+        item_kwargs: dict[str, Any] = {"item_posterior": trial_posterior}
         if trial_posterior == "autoregressive_coupling_flow":
-            item_kwargs = {
-                "item_posterior": trial_posterior,
-                **AutoregressiveCouplingFlowSpace.draws_summary_kwargs(hparams),
-            }
+            item_kwargs.update(
+                AutoregressiveCouplingFlowSpace.draws_summary_kwargs(hparams)
+            )
         return EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=flow,

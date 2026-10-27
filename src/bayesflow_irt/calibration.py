@@ -81,6 +81,10 @@ class CalibratedIRTApproximator(_CalibrationMixinBase, EquivariantIRTApproximato
         kwargs.setdefault(
             "sample_kwargs", flow_matching_sample_kwargs.get("flow_sample_kwargs", {})
         )
+        # Calibration loss supports flow matching only, so it is this class's
+        # default and warning about it would point at nothing to switch to.
+        kwargs.setdefault("item_posterior", "flow_matching")
+        kwargs.setdefault("_warn_deprecated", False)
         super().__init__(**kwargs)
         if getattr(self, "item_posterior", "flow_matching") != "flow_matching":
             raise NotImplementedError(

@@ -90,6 +90,7 @@ def trained_1pl_approximator():
     approximator = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=inference_net,
+        item_posterior="flow_matching",
         summary_network=summary_net,
     )
     approximator.compile(optimizer="adam")

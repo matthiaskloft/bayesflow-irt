@@ -27,6 +27,7 @@ def test_init_accepts_legacy_standardize_kwarg() -> None:
         EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             standardize=["legacy"],
         )
@@ -42,6 +43,7 @@ def test_sample_accepts_positional_conditions_and_n_samples_alias() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
         )
 
@@ -71,6 +73,7 @@ def test_init_rejects_standardize_with_gradient_accumulation() -> None:
             EquivariantIRTApproximator(
                 adapter=MagicMock(),
                 inference_network=MagicMock(),
+                item_posterior="flow_matching",
                 summary_network=MagicMock(),
                 standardize_params=True,
                 gradient_accumulation_steps=2,
@@ -82,6 +85,7 @@ def test_sample_summary_batch_size_chunks_summary_forward() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
         )
 
@@ -133,6 +137,7 @@ def test_init_rejects_per_chunk_backward_mode() -> None:
             EquivariantIRTApproximator(
                 adapter=MagicMock(),
                 inference_network=MagicMock(),
+                item_posterior="flow_matching",
                 summary_network=MagicMock(),
                 flow_chunk_backward="per_chunk",
             )
@@ -143,6 +148,7 @@ def test_init_normalizes_legacy_none_backward_mode() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             flow_chunk_backward="none",
         )
@@ -155,6 +161,7 @@ def test_chunked_weighted_loss_equals_unchunked_weighted_loss() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             flow_chunk_size=2,
             flow_chunk_backward="none",
@@ -212,6 +219,7 @@ def test_checkpoint_chunking_preserves_summary_gradient_path() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             flow_chunk_size=2,
             flow_chunk_backward="checkpoint",
@@ -249,6 +257,7 @@ def test_chunked_loss_equals_unchunked_loss() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             flow_chunk_size=3,
         )
@@ -317,6 +326,7 @@ def test_gradient_accumulation_applies_at_correct_cadence() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             gradient_accumulation_steps=3,
         )
@@ -374,6 +384,7 @@ def test_gradient_accumulation_matches_large_batch_gradient() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             gradient_accumulation_steps=3,
         )
@@ -444,6 +455,7 @@ def test_gradient_accumulation_clears_state_on_exception() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             gradient_accumulation_steps=3,
         )
@@ -494,6 +506,7 @@ def test_epoch_end_flushes_partial_accumulation() -> None:
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             gradient_accumulation_steps=3,
         )
@@ -538,6 +551,7 @@ def _build_tiny_2pl_approximator():
     approximator = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=flow,
+        item_posterior="flow_matching",
         summary_network=summary,
     )
     return approximator, simulator, adapter
@@ -701,6 +715,7 @@ def test_gradient_accumulation_resets_at_epoch_boundary_in_real_fit() -> None:
     approx = EquivariantIRTApproximator(
         adapter=make_2pl_adapter(simulator),
         inference_network=bf.networks.FlowMatching(subnet_kwargs={"widths": (16, 16)}),
+        item_posterior="flow_matching",
         summary_network=MatrixEquivariantIRTSummary(
             embed_dim=8,
             matrix_hidden_dim=8,
@@ -742,6 +757,7 @@ def test_compute_metrics_broadcasts_per_dataset_sample_weight(chunk_size) -> Non
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
+            item_posterior="flow_matching",
             summary_network=MagicMock(),
             flow_chunk_size=chunk_size,
         )

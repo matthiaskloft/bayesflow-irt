@@ -70,7 +70,7 @@ adapter = make_2pl_adapter(simulator, internal_parameterization="loading")
 
 approximator = EquivariantIRTApproximator(
     adapter=adapter,
-    inference_network=bf.networks.FlowMatching(),
+    inference_network=bf.networks.CouplingFlow(),
     summary_network=MatrixEquivariantIRTSummary(embed_dim=64),
 )
 approximator.compile(optimizer="adam")

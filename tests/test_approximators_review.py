@@ -22,6 +22,7 @@ def _bare_approx(**kwargs) -> EquivariantIRTApproximator:
             adapter=MagicMock(),
             inference_network=MagicMock(),
             summary_network=MagicMock(),
+            item_posterior=kwargs.pop("item_posterior", "flow_matching"),
             **kwargs,
         )
 
@@ -187,6 +188,7 @@ def test_loading_parameterization_survives_save_load(tmp_path) -> None:
         inference_network=bf.networks.FlowMatching(
             subnet_kwargs={"widths": (16,), "time_embedding_dim": 8},
         ),
+        item_posterior="flow_matching",
         summary_network=summary,
     )
     batch = adapter(simulator.sample((2,)))

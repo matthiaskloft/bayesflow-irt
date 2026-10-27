@@ -3,8 +3,8 @@
 ``EquivariantIRTApproximator`` works with summary networks which output
 ``(batch, num_items, embed_dim)`` — one embedding per item. The approximator
 merges ``batch × num_items`` before feeding the flow so that a **shared**
-``FlowMatching`` network can operate on individual ``(a_i, b_i)`` pairs
-conditioned on per-item embeddings.
+flow can operate on individual ``(a_i, b_i)`` pairs conditioned on
+per-item embeddings.
 """
 
 from __future__ import annotations
@@ -115,7 +115,8 @@ class EquivariantIRTApproximator(ContinuousApproximator):
     adapter : bayesflow.adapters.Adapter
         Adapter for data processing.
     inference_network : InferenceNetwork
-        A ``FlowMatching`` network operating on per-item parameters.
+        Flow over per-item parameters: a ``CouplingFlow`` for the default
+        ``item_posterior``.
     summary_network : keras.Layer
         Per-item summary network with output shape ``(batch, num_items, D)``.
     standardize_params : bool
@@ -140,10 +141,7 @@ class EquivariantIRTApproximator(ContinuousApproximator):
     item_posterior : {"flow_matching", "autoregressive_coupling_flow"}
         Factorization of the item posterior.
 
-        * ``"flow_matching"`` (default): items are conditionally independent
-          given their embeddings, ``prod_i q(item_i | h_i)``; one shared flow
-          (typically ``FlowMatching``) over each item's parameters.
-        * ``"autoregressive_coupling_flow"``: the autoregressive item factor
+        * ``"autoregressive_coupling_flow"`` (default): the autoregressive item factor
           ``prod_i q(item_i | item_<i, Y)`` of Habermann et al. (2026,
           Sec. 2.5, Eq. 3). The flow for item ``i`` is conditioned on
           ``[h_i, s_i, log(i + 1)]`` plus the global
@@ -162,6 +160,13 @@ class EquivariantIRTApproximator(ContinuousApproximator):
           matching integrates an ODE. Draws are joint across items, so
           functionals of several items (test characteristic curves, sum
           scores) get the right spread.
+        * ``"flow_matching"`` (deprecated): items are conditionally
+          independent given their embeddings, ``prod_i q(item_i | h_i)``; one
+          shared flow (typically ``FlowMatching``) over each item's
+          parameters. Functionals of several items come out too narrow, and
+          sampling solves an ODE per draw. Emits a ``DeprecationWarning`` and
+          will be removed in a future release; checkpoints saved with it
+          still load.
     draws_summary_pooling : {"mean", "mean_std", "mean_max", "attention", "pma"}
         How the draws summary pools the earlier draws
         (``autoregressive_coupling_flow`` only): the DeepSet mean of
@@ -192,11 +197,12 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         flow_chunk_size: int | None = None,
         flow_chunk_backward: str | None = None,
         gradient_accumulation_steps: int = 1,
-        item_posterior: str = "flow_matching",
+        item_posterior: str = "autoregressive_coupling_flow",
         draws_summary_pooling: str = "mean",
         draws_summary_hidden_dim: int = 32,
         draws_summary_dim: int = 32,
         draws_summary_num_heads: int = 4,
+        _warn_deprecated: bool = True,
         **kwargs,
     ):
         if item_posterior not in ITEM_POSTERIORS:
@@ -210,7 +216,18 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             raise TypeError(
                 "item_posterior='autoregressive_coupling_flow' requires a "
                 "CouplingFlow inference_network, got "
-                f"{type(inference_network).__name__}."
+                f"{type(inference_network).__name__}. It is the default; pass "
+                "item_posterior='flow_matching' (deprecated) to "
+                "keep a flow-matching network."
+            )
+        if item_posterior == "flow_matching" and _warn_deprecated:
+            warnings.warn(
+                "item_posterior='flow_matching' is deprecated and will be "
+                "removed in a future release; use the default "
+                "item_posterior='autoregressive_coupling_flow' with a "
+                "CouplingFlow inference_network.",
+                DeprecationWarning,
+                stacklevel=2,
             )
         if item_posterior != "flow_matching" and standardize_params:
             raise ValueError(
@@ -1137,6 +1154,10 @@ class EquivariantIRTApproximator(ContinuousApproximator):
     @classmethod
     def from_config(cls, config, custom_objects=None):
         config = dict(config)
+        # Configs saved before ``item_posterior`` existed are flow matching.
+        config.setdefault("item_posterior", "flow_matching")
+        # Loading a saved model is not a new use of the deprecated option.
+        config["_warn_deprecated"] = False
         from .adapters import (
             LogTransform,
             OneHotEncode,

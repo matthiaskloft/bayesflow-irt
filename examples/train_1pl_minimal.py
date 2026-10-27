@@ -68,7 +68,7 @@ def main() -> None:
         num_outer_inducing_points=32,
         gradient_checkpointing=True,
     )
-    flow = bf.networks.FlowMatching()
+    flow = bf.networks.CouplingFlow()
     approximator = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=flow,
