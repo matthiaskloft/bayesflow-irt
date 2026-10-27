@@ -107,11 +107,14 @@ def _drop_tracebacks(exc: BaseException) -> BaseException:
     exception lives.
     """
     seen: set[int] = set()
-    link: BaseException | None = exc
-    while link is not None and id(link) not in seen:
+    stack: list[BaseException | None] = [exc]
+    while stack:
+        link = stack.pop()
+        if link is None or id(link) in seen:
+            continue
         seen.add(id(link))
         link.__traceback__ = None
-        link = link.__cause__ or link.__context__
+        stack += [link.__cause__, link.__context__]
     return exc
 
 
