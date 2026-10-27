@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   after running out of memory: it strips the error's tracebacks and runs the
   cycle collector. Before, the retries could shrink to one dataset and still
   fail (#21).
+- `sample_posterior` runs the cycle collector between chunks and around the
+  `chunk_size="auto"` probe. Each flow-matching chunk left about 1 GiB of
+  device tensors in reference cycles. Over 24 chunks of a 50x500 corner that
+  added up to 22 GiB, and the auto chunk size was computed from memory still
+  holding that garbage (#21). Each collection costs about 0.1 s with a large
+  model loaded.
 
 ## [0.2.0] - 2026-10-24
 
