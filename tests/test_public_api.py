@@ -29,7 +29,6 @@ CORE_ADAPTERS = [
 CORE_APPROXIMATORS_AND_NETWORKS = [
     "MatrixEquivariantIRTSummary",
     "EquivariantIRTApproximator",
-    "CalibratedIRTApproximator",
 ]
 
 # Core public API: Priors and Utilities.

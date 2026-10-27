@@ -1,4 +1,4 @@
-"""HPO hooks for ``item_posterior="autoregressive_coupling_flow"``."""
+"""HPO hooks for the autoregressive item posterior and its per-item flow."""
 
 import numpy as np
 import pytest
@@ -15,8 +15,12 @@ from bayesflow_irt import hpo  # noqa: E402
 # Access names through the module: tests/test_hpo.py reloads bayesflow_irt.hpo,
 # which would leave directly imported classes stale.
 
-_AR = "autoregressive_coupling_flow"
 CORNERS = [(3, 20), (5, 30)]
+BOTH = ["coupling_flow", "flow_matching"]
+_NETWORKS = {
+    "coupling_flow": bf.networks.CouplingFlow,
+    "flow_matching": bf.networks.FlowMatching,
+}
 
 
 @pytest.fixture()
@@ -32,6 +36,12 @@ def sim_2pl():
 @pytest.fixture()
 def adapter_2pl(sim_2pl):
     return make_2pl_adapter(sim_2pl)
+
+
+def _hooks(sim, adapter, **kwargs):
+    return hpo.make_irt_hooks(
+        sim, adapter, corners=CORNERS, sims_per_corner=2, **kwargs
+    )
 
 
 def _hparams(hooks, **override) -> dict:
@@ -52,10 +62,17 @@ def _hparams(hooks, **override) -> dict:
     return params
 
 
-def test_space_dimensions():
-    names = {d.name for d in hpo.AutoregressiveCouplingFlowSpace().dimensions}
+@pytest.mark.parametrize(
+    ("space", "prefix"),
+    [
+        ("AutoregressiveCouplingFlowSpace", "cf_"),
+        ("AutoregressiveFlowMatchingSpace", "fm_"),
+    ],
+)
+def test_space_dimensions(space, prefix):
+    names = {d.name for d in getattr(hpo, space)().dimensions}
+    assert any(n.startswith(prefix) for n in names)
     assert {
-        "cf_depth",
         "draws_summary_pooling",
         "draws_summary_hidden_dim",
         "draws_summary_dim",
@@ -67,20 +84,17 @@ def test_space_dimensions():
         "draws_summary_dim": 16,
         "draws_summary_num_heads": 4,
     }
-    assert hpo.AutoregressiveCouplingFlowSpace.draws_summary_kwargs(params) == params
+    assert getattr(hpo, space).draws_summary_kwargs(params) == params
 
 
-def test_default_space_and_build(sim_2pl, adapter_2pl):
-    hooks = hpo.make_irt_hooks(
-        sim_2pl, adapter_2pl, corners=CORNERS, sims_per_corner=2, item_posterior=_AR
-    )
+def test_default_is_coupling_flow(sim_2pl, adapter_2pl):
+    hooks = _hooks(sim_2pl, adapter_2pl)
     assert isinstance(
         hooks.search_space.inference_space, hpo.AutoregressiveCouplingFlowSpace
     )
     model = hooks.build_fn(
         _hparams(hooks, draws_summary_pooling="attention", draws_summary_hidden_dim=32)
     )
-    assert model.item_posterior == _AR
     assert isinstance(model.inference_network, bf.networks.CouplingFlow)
     assert model.draws_summary_pooling == "attention"
     assert model.draws_summary_hidden_dim == 32
@@ -92,56 +106,47 @@ def test_default_space_and_build(sim_2pl, adapter_2pl):
     assert np.all(np.isfinite(out["a"]))
 
 
-def test_default_stays_flow_matching(sim_2pl, adapter_2pl):
-    hooks = hpo.make_irt_hooks(sim_2pl, adapter_2pl, corners=CORNERS, sims_per_corner=2)
-    assert isinstance(hooks.search_space.inference_space, FlowMatchingSpace)
-    assert hooks.build_fn(_hparams(hooks)).item_posterior == "flow_matching"
+def test_flow_matching_builds_and_samples(sim_2pl, adapter_2pl):
+    hooks = _hooks(sim_2pl, adapter_2pl, flow="flow_matching")
+    assert isinstance(
+        hooks.search_space.inference_space, hpo.AutoregressiveFlowMatchingSpace
+    )
+    model = hooks.build_fn(_hparams(hooks, draws_summary_pooling="mean_std"))
+    assert isinstance(model.inference_network, bf.networks.FlowMatching)
+    assert model.draws_summary_pooling == "mean_std"
+
+    data = sim_2pl.sample((2,))
+    model.build_from_data(adapter_2pl(data))
+    out = model.sample(
+        num_samples=2,
+        conditions=data,
+        flow_sample_kwargs={"method": "euler", "steps": 2},
+    )
+    assert np.all(np.isfinite(out["b"]))
 
 
-def test_rejects_wrong_space(sim_2pl, adapter_2pl):
-    with pytest.raises(TypeError, match="AutoregressiveCouplingFlowSpace"):
-        hpo.make_irt_hooks(
-            sim_2pl,
-            adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            item_posterior=_AR,
-            inference_space=FlowMatchingSpace(),
-        )
+@pytest.mark.parametrize(
+    ("flow", "space"),
+    [
+        ("coupling_flow", FlowMatchingSpace),
+        ("flow_matching", FlowMatchingSpace),
+        ("flow_matching", lambda: hpo.AutoregressiveCouplingFlowSpace()),
+    ],
+)
+def test_rejects_a_space_without_the_flow(sim_2pl, adapter_2pl, flow, space):
+    with pytest.raises(TypeError, match="needs an Autoregressive"):
+        _hooks(sim_2pl, adapter_2pl, flow=flow, inference_space=space())
 
 
-def test_rejects_ode_kwargs(sim_2pl, adapter_2pl):
+def test_rejects_ode_kwargs_for_coupling_flow(sim_2pl, adapter_2pl):
     with pytest.raises(ValueError, match="flow_sample_kwargs"):
-        hpo.make_irt_hooks(
-            sim_2pl,
-            adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            item_posterior=_AR,
-            flow_sample_kwargs={"method": "euler", "steps": 8},
-        )
+        _hooks(sim_2pl, adapter_2pl, flow_sample_kwargs={"method": "euler", "steps": 8})
 
 
-def test_rejects_unknown_item_posterior(sim_2pl, adapter_2pl):
-    with pytest.raises(ValueError, match="item_posterior"):
-        hpo.make_irt_hooks(
-            sim_2pl,
-            adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            item_posterior="autoregressive",
-        )
-
-
-def test_rejects_ar_space_with_flow_matching(sim_2pl, adapter_2pl):
-    with pytest.raises(TypeError, match="autoregressive_coupling_flow"):
-        hpo.make_irt_hooks(
-            sim_2pl,
-            adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            inference_space=hpo.AutoregressiveCouplingFlowSpace(),
-        )
+@pytest.mark.parametrize("bad", ["nope", [], BOTH[:1] * 2])
+def test_flow_is_validated(sim_2pl, adapter_2pl, bad):
+    with pytest.raises(ValueError, match="flow must be"):
+        _hooks(sim_2pl, adapter_2pl, flow=bad)
 
 
 @pytest.mark.parametrize(
@@ -151,9 +156,7 @@ def test_rejects_ar_space_with_flow_matching(sim_2pl, adapter_2pl):
 def test_build_every_pooling_at_the_width_extremes(
     sim_2pl, adapter_2pl, pooling, hidden
 ):
-    hooks = hpo.make_irt_hooks(
-        sim_2pl, adapter_2pl, corners=CORNERS, sims_per_corner=2, item_posterior=_AR
-    )
+    hooks = _hooks(sim_2pl, adapter_2pl)
     model = hooks.build_fn(
         _hparams(hooks, draws_summary_pooling=pooling, draws_summary_hidden_dim=hidden)
     )
@@ -163,17 +166,17 @@ def test_build_every_pooling_at_the_width_extremes(
     assert np.all(np.isfinite(out["b"]))
 
 
-def test_heads_must_divide_the_attention_width():
-    from bayesflow_hpo.search_spaces.base import IntDimension
+@pytest.mark.parametrize(
+    "space", ["AutoregressiveCouplingFlowSpace", "AutoregressiveFlowMatchingSpace"]
+)
+def test_heads_must_divide_the_attention_width(space):
+    from bayesflow_hpo.search_spaces.base import CategoricalDimension, IntDimension
 
+    cls = getattr(hpo, space)
     with pytest.raises(ValueError, match="multiple of"):
-        hpo.AutoregressiveCouplingFlowSpace(
-            draws_summary_num_heads=IntDimension("draws_summary_num_heads", constant=3)
-        )
+        cls(draws_summary_num_heads=IntDimension("draws_summary_num_heads", constant=3))
     # no attention pooling, no constraint
-    from bayesflow_hpo.search_spaces.base import CategoricalDimension
-
-    hpo.AutoregressiveCouplingFlowSpace(
+    cls(
         draws_summary_pooling=CategoricalDimension(
             "draws_summary_pooling", constant="mean"
         ),
@@ -182,121 +185,101 @@ def test_heads_must_divide_the_attention_width():
 
 
 @pytest.mark.slow
-def test_pipeline_check(sim_2pl, adapter_2pl):
-    """Dry run build -> compile -> train -> validate on the AR path."""
-    hpo.make_irt_hooks(
-        sim_2pl,
-        adapter_2pl,
-        corners=CORNERS,
-        sims_per_corner=2,
-        item_posterior=_AR,
-        run_pipeline_check=True,
-    )
+@pytest.mark.parametrize("flow", BOTH)
+def test_pipeline_check(sim_2pl, adapter_2pl, flow):
+    """Dry run build -> compile -> train -> validate for each flow."""
+    _hooks(sim_2pl, adapter_2pl, flow=flow, run_pipeline_check=True)
 
 
-# --- item_posterior=[...]: the factorization as a search dimension ---------
+# --- flow=[...]: the per-item flow as a search dimension --------------------
 
 
-def _choice_trial_params(choice: str) -> dict:
-    """Params Optuna samples from `ItemPosteriorChoiceSpace` for one choice."""
+def _choice_trial_params(choice: str, **space_kwargs) -> dict:
+    """Params Optuna samples from `FlowChoiceSpace` for one choice."""
     import optuna
 
-    space = hpo.ItemPosteriorChoiceSpace()
+    space = hpo.FlowChoiceSpace(**space_kwargs)
     study = optuna.create_study()
-    study.enqueue_trial({"item_posterior": choice})
+    study.enqueue_trial({"flow": choice})
     return space.sample(study.ask())
 
 
-def test_choice_space_samples_only_the_chosen_family():
+def test_choice_space_samples_only_the_chosen_flow():
+    cf = _choice_trial_params("coupling_flow")
     fm = _choice_trial_params("flow_matching")
-    ar = _choice_trial_params(_AR)
-    assert fm["item_posterior"] == "flow_matching"
-    assert ar["item_posterior"] == _AR
+    assert cf["flow"] == "coupling_flow"
+    assert fm["flow"] == "flow_matching"
+    assert any(k.startswith("cf_") for k in cf)
+    assert not any(k.startswith("fm_") for k in cf)
     assert any(k.startswith("fm_") for k in fm)
-    assert not any(k.startswith(("cf_", "draws_summary_")) for k in fm)
-    assert any(k.startswith("draws_summary_") for k in ar)
-    assert not any(k.startswith("fm_") for k in ar)
+    assert not any(k.startswith("cf_") for k in fm)
+    for params in (cf, fm):
+        assert any(k.startswith("draws_summary_") for k in params)
 
 
-BOTH = ["flow_matching", _AR]
+def test_choice_space_lists_shared_dimensions_once():
+    names = [d.name for d in hpo.FlowChoiceSpace().dimensions]
+    assert len(names) == len(set(names))
+    assert names[0] == "flow"
 
 
-def test_choice_space_searches_only_the_listed_families():
-    space = hpo.ItemPosteriorChoiceSpace(families=("flow_matching",))
+def test_choice_space_searches_only_the_listed_flows():
+    space = hpo.FlowChoiceSpace(flows=("flow_matching",))
     names = {d.name for d in space.dimensions}
-    assert not any(n.startswith(("cf_", "draws_summary_")) for n in names)
-    assert _choice_trial_params("flow_matching")["item_posterior"] == "flow_matching"
+    assert not any(n.startswith("cf_") for n in names)
+    params = _choice_trial_params("flow_matching", flows=("flow_matching",))
+    assert params["flow"] == "flow_matching"
 
 
 @pytest.mark.parametrize("bad", [[], ["flow_matching", "flow_matching"], ["nope"]])
-def test_item_posterior_list_is_validated(bad):
-    with pytest.raises(ValueError, match="item_posterior"):
-        hpo.normalize_item_posterior(bad)
+def test_flow_list_is_validated(bad):
+    with pytest.raises(ValueError, match="flow must be"):
+        hpo.normalize_flow(bad)
 
 
-def test_one_element_list_pins_the_family(sim_2pl, adapter_2pl):
-    hooks = hpo.make_irt_hooks(
-        sim_2pl, adapter_2pl, corners=CORNERS, sims_per_corner=2, item_posterior=[_AR]
-    )
+def test_one_element_list_pins_the_flow(sim_2pl, adapter_2pl):
+    hooks = _hooks(sim_2pl, adapter_2pl, flow=["flow_matching"])
     assert isinstance(
-        hooks.search_space.inference_space, hpo.AutoregressiveCouplingFlowSpace
+        hooks.search_space.inference_space, hpo.AutoregressiveFlowMatchingSpace
     )
 
 
-def test_list_must_match_the_choice_space_families(sim_2pl, adapter_2pl):
-    with pytest.raises(ValueError, match="does not match"):
-        hpo.make_irt_hooks(
-            sim_2pl,
-            adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            item_posterior=BOTH,
-            inference_space=hpo.ItemPosteriorChoiceSpace(families=("flow_matching",)),
-        )
-    with pytest.raises(ValueError, match="does not match"):
-        hpo.make_irt_hooks(
-            sim_2pl,
-            adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            item_posterior=BOTH,
-            inference_space=hpo.ItemPosteriorChoiceSpace(families=tuple(BOTH[::-1])),
-        )
+def test_list_must_match_the_choice_space_flows(sim_2pl, adapter_2pl):
+    for flows in (("flow_matching",), tuple(BOTH[::-1])):
+        with pytest.raises(ValueError, match="does not match"):
+            _hooks(
+                sim_2pl,
+                adapter_2pl,
+                flow=BOTH,
+                inference_space=hpo.FlowChoiceSpace(flows=flows),
+            )
 
 
-def test_choice_space_rejects_a_non_ar_space():
-    with pytest.raises(TypeError, match="AutoregressiveCouplingFlowSpace"):
-        hpo.ItemPosteriorChoiceSpace(autoregressive_coupling_flow=FlowMatchingSpace())
+def test_choice_space_rejects_a_space_without_draws_summary():
+    with pytest.raises(TypeError, match="AutoregressiveFlowMatchingSpace"):
+        hpo.FlowChoiceSpace(flow_matching=FlowMatchingSpace())
 
 
-def test_list_builds_either_family(sim_2pl, adapter_2pl):
-    hooks = hpo.make_irt_hooks(
-        sim_2pl, adapter_2pl, corners=CORNERS, sims_per_corner=2, item_posterior=BOTH
-    )
-    assert isinstance(hooks.search_space.inference_space, hpo.ItemPosteriorChoiceSpace)
-    for choice, net in (
-        ("flow_matching", bf.networks.FlowMatching),
-        (_AR, bf.networks.CouplingFlow),
-    ):
-        model = hooks.build_fn(_hparams(hooks, item_posterior=choice))
-        assert model.item_posterior == choice
-        assert isinstance(model.inference_network, net)
+def test_list_builds_either_flow(sim_2pl, adapter_2pl):
+    hooks = _hooks(sim_2pl, adapter_2pl, flow=BOTH)
+    assert isinstance(hooks.search_space.inference_space, hpo.FlowChoiceSpace)
+    for choice in BOTH:
+        model = hooks.build_fn(_hparams(hooks, flow=choice))
+        assert isinstance(model.inference_network, _NETWORKS[choice])
 
 
 def test_list_applies_ode_kwargs_to_flow_matching_only(sim_2pl, adapter_2pl):
-    ode = {"method": "euler", "steps": 4}
-    hooks = hpo.make_irt_hooks(
+    ode = {"method": "euler", "steps": 2}
+    hooks = _hooks(
         sim_2pl,
         adapter_2pl,
-        corners=CORNERS,
-        sims_per_corner=2,
-        item_posterior=BOTH,
+        flow=BOTH,
         flow_sample_kwargs=ode,
         metrics=["calibration_error"],
     )
     seen = {}
-    for choice in ("flow_matching", _AR):
-        model = hooks.build_fn(_hparams(hooks, item_posterior=choice))
+    for choice in BOTH:
+        model = hooks.build_fn(_hparams(hooks, flow=choice))
         model.build_from_data(adapter_2pl(sim_2pl.sample((2,))))
         original = model.sample
 
@@ -306,31 +289,23 @@ def test_list_applies_ode_kwargs_to_flow_matching_only(sim_2pl, adapter_2pl):
 
         model.sample = recording
         hooks.validate_fn(model, None, 4)
-    assert seen == {"flow_matching": ode, _AR: None}
+    assert seen == {"coupling_flow": None, "flow_matching": ode}
 
 
-def test_list_rejects_a_single_family_space(sim_2pl, adapter_2pl):
-    with pytest.raises(TypeError, match="ItemPosteriorChoiceSpace"):
-        hpo.make_irt_hooks(
+def test_list_rejects_a_single_flow_space(sim_2pl, adapter_2pl):
+    with pytest.raises(TypeError, match="FlowChoiceSpace"):
+        _hooks(
             sim_2pl,
             adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            item_posterior=BOTH,
-            inference_space=FlowMatchingSpace(),
+            flow=BOTH,
+            inference_space=hpo.AutoregressiveFlowMatchingSpace(),
         )
-    with pytest.raises(TypeError, match="two or more"):
-        hpo.make_irt_hooks(
-            sim_2pl,
-            adapter_2pl,
-            corners=CORNERS,
-            sims_per_corner=2,
-            inference_space=hpo.ItemPosteriorChoiceSpace(),
-        )
+    with pytest.raises(TypeError, match="needs an Autoregressive"):
+        _hooks(sim_2pl, adapter_2pl, inference_space=hpo.FlowChoiceSpace())
 
 
-def test_pipeline_check_dry_runs_each_family(sim_2pl, adapter_2pl, monkeypatch):
-    """`check_pipeline` samples with a first-choice mock, so each family is pinned."""
+def test_pipeline_check_dry_runs_each_flow(sim_2pl, adapter_2pl, monkeypatch):
+    """`check_pipeline` samples with a first-choice mock, so each flow is pinned."""
     import optuna
 
     seen = []
@@ -338,44 +313,28 @@ def test_pipeline_check_dry_runs_each_family(sim_2pl, adapter_2pl, monkeypatch):
     def _capture(**kwargs):
         space = kwargs["search_space"]
         params = space.sample(optuna.create_study().ask())
-        seen.append(params["item_posterior"])
+        seen.append(params["flow"])
 
     monkeypatch.setattr(hpo, "check_pipeline", _capture)
-    hpo.make_irt_hooks(
-        sim_2pl,
-        adapter_2pl,
-        corners=CORNERS,
-        sims_per_corner=2,
-        item_posterior=BOTH,
-        run_pipeline_check=True,
-    )
-    assert seen == ["flow_matching", _AR]
+    _hooks(sim_2pl, adapter_2pl, flow=BOTH, run_pipeline_check=True)
+    assert seen == BOTH
 
 
-def test_pipeline_check_runs_once_for_a_single_family(
-    sim_2pl, adapter_2pl, monkeypatch
-):
+def test_pipeline_check_runs_once_for_a_single_flow(sim_2pl, adapter_2pl, monkeypatch):
     calls = []
     monkeypatch.setattr(hpo, "check_pipeline", lambda **kw: calls.append(kw))
-    hpo.make_irt_hooks(
-        sim_2pl,
-        adapter_2pl,
-        corners=CORNERS,
-        sims_per_corner=2,
-        item_posterior=_AR,
-        run_pipeline_check=True,
-    )
+    _hooks(sim_2pl, adapter_2pl, run_pipeline_check=True)
     assert len(calls) == 1
 
 
 @pytest.mark.slow
-def test_pipeline_check_trains_the_autoregressive_family(sim_2pl, adapter_2pl):
+def test_pipeline_check_trains_both_flows(sim_2pl, adapter_2pl):
     hooks = hpo.make_irt_hooks(
         sim_2pl,
         adapter_2pl,
         corners=[(3, 20)],
         sims_per_corner=2,
-        item_posterior=BOTH,
+        flow=BOTH,
         run_pipeline_check=True,
     )
     assert isinstance(hooks, hpo.IRTHooks)

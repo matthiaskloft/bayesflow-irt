@@ -185,7 +185,7 @@ _ADAPTERS = {
 
 
 def build_approximator(cfg: dict[str, Any], adapter) -> EquivariantIRTApproximator:
-    """Build the summary net, FlowMatching inference net, and approximator."""
+    """Build the summary net, per-item FlowMatching flow, and approximator."""
     s = cfg["summary"]
     summary_net = MatrixEquivariantIRTSummary(
         embed_dim=s["embed_dim"],
@@ -231,9 +231,6 @@ def build_approximator(cfg: dict[str, Any], adapter) -> EquivariantIRTApproximat
         summary_network=summary_net,
         flow_chunk_size=a.get("flow_chunk_size", 1024),
         flow_chunk_backward=a.get("flow_chunk_backward", "checkpoint"),
-        # Deprecated (#20); this script's configs still describe a
-        # flow-matching network.
-        item_posterior="flow_matching",
     )
 
 

@@ -36,7 +36,6 @@ Issues = "https://github.com/matthiaskloft/bayesflow-irt/issues"
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy", "matplotlib", "seaborn"]
 examples = ["matplotlib", "seaborn", "tqdm", "ipywidgets", "ipykernel"]
-calibration = ["bayesflow-calibration-loss>=0.2.0"]
 # 0.5.2+: provides `AggregationConfigError`, the metric-kind registry and the
 # checkpoint pool's `extra_metadata`.
 hpo = ["bayesflow-hpo>=0.5.2"]
@@ -65,11 +64,6 @@ testpaths = ["tests"]
 addopts = "-m 'not slow'"
 markers = [
     "slow: tests that fit BayesFlow approximators and are excluded from default runs",
-]
-# Most tests exercise the deprecated flow-matching item posterior on purpose;
-# test_autoregressive_item_posterior.py checks the warning itself.
-filterwarnings = [
-    "ignore:item_posterior='flow_matching' is deprecated:DeprecationWarning",
 ]
 
 [tool.mypy]

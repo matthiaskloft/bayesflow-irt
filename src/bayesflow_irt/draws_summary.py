@@ -6,8 +6,7 @@ the autoregressive item factor of Habermann et al. (2026, Sec. 2.5, Eq. 3). The
 summary pairs each earlier draw with its item embedding, a simplification of the
 extended observations of Sec. 2.6 (which pair parameters with raw observations
 before the exchangeable encoding). It is used by
-:class:`~bayesflow_irt.EquivariantIRTApproximator` with
-``item_posterior="autoregressive_coupling_flow"``.
+:class:`~bayesflow_irt.EquivariantIRTApproximator`.
 
 References
 ----------

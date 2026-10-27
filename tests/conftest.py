@@ -13,6 +13,7 @@ import zipfile
 os.environ["KERAS_BACKEND"] = "torch"
 
 import bayesflow as bf
+import keras
 import pytest
 
 from bayesflow_irt import (
@@ -90,7 +91,6 @@ def trained_1pl_approximator():
     approximator = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=inference_net,
-        item_posterior="flow_matching",
         summary_network=summary_net,
     )
     approximator.compile(optimizer="adam")
@@ -106,3 +106,12 @@ def trained_1pl_approximator():
     )
 
     return approximator, simulator
+
+
+def bare_model_init(self, *args, **kwargs):
+    """Stand-in for ``ContinuousApproximator.__init__`` in unit tests.
+
+    Initializes only the Keras model, so the approximator can still attach
+    its own layers (the draws summary) without an adapter or networks.
+    """
+    keras.Model.__init__(self)

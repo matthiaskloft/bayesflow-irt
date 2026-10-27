@@ -65,7 +65,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -104,7 +103,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -152,7 +150,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -168,7 +165,6 @@ class TestApproximatorWorkflow:
         samples = approximator.sample(
             num_samples=128,
             conditions=test_data,
-            sample_chunk_size=32,
         )
 
         assert "a" in samples and "b" in samples
@@ -202,7 +198,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -218,7 +213,6 @@ class TestApproximatorWorkflow:
         samples = approximator.sample(
             num_samples=96,
             conditions=test_data,
-            sample_chunk_size=24,
             condition_chunk_size=16,
         )
 
@@ -253,7 +247,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -270,7 +263,6 @@ class TestApproximatorWorkflow:
         samples = approximator.sample(
             num_samples=32,
             conditions=conditions,
-            sample_chunk_size=16,
             condition_chunk_size=32,
         )
 
@@ -305,7 +297,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -352,7 +343,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -391,7 +381,6 @@ class TestApproximatorWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -435,7 +424,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -479,7 +467,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -519,7 +506,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -561,7 +547,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -602,7 +587,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -643,7 +627,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -683,7 +666,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=bf.networks.FlowMatching(depth=2),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -725,7 +707,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=bf.networks.FlowMatching(depth=2),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -771,7 +752,6 @@ class TestMatrixEquivariantWorkflow:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=bf.networks.FlowMatching(depth=2),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -820,7 +800,6 @@ class TestTrainingHelpers:
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approximator.compile(optimizer="adam")
@@ -945,7 +924,6 @@ class TestTrainingHelpers:
         approx = EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=_make_flow(),
-            item_posterior="flow_matching",
             summary_network=summary_net,
         )
         approx.compile(optimizer="adam")

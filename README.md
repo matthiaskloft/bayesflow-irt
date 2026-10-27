@@ -22,8 +22,7 @@ refitting, for any number of items and persons within the trained range.
 - `EquivariantIRTApproximator` for per-item posterior inference
 - Person scoring, metadata sidecars for trained models, and memory controls for
   large `n_persons`
-- Optional: calibration-aware training (`CalibratedIRTApproximator`) and
-  hyperparameter-optimization hooks (`bayesflow_irt.hpo`)
+- Optional: hyperparameter-optimization hooks (`bayesflow_irt.hpo`)
 - Planned: pretrained checkpoints with model cards, and example notebooks
 
 ## Installation
@@ -37,9 +36,8 @@ pip install -e ".[torch]"
 ```
 
 Extras: `dev` (tests), `examples` (plotting and Jupyter), `card` (model-card
-plots), `hpo` (`bayesflow-hpo`, from PyPI), `numba` (faster response
-sampling), and `calibration` (`bayesflow-calibration-loss`, which will be
-released separately; until then this extra cannot be installed). The
+plots), `hpo` (`bayesflow-hpo`, from PyPI), and `numba` (faster response
+sampling). The
 `tensorflow` and `jax` backend extras are also available.
 
 Set the Keras backend before importing `keras`, `bayesflow`, or `bayesflow_irt`:

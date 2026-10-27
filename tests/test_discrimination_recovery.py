@@ -64,7 +64,6 @@ def _fit_and_eval(
     approx = EquivariantIRTApproximator(
         adapter=adapter,
         inference_network=bf.networks.FlowMatching(subnet_kwargs={"widths": (64, 64)}),
-        item_posterior="flow_matching",
         summary_network=summary_network,
     )
     approx.compile(optimizer=keras.optimizers.Adam(1e-3))
@@ -77,7 +76,6 @@ def _fit_and_eval(
     samples = approx.sample(
         num_samples=120,
         conditions=eval_raw,
-        sample_chunk_size=40,
         condition_chunk_size=128,
     )
     pred_a = samples["a"].mean(axis=1)

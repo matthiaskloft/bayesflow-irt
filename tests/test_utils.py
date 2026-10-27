@@ -10,7 +10,6 @@ import bayesflow_irt.utils as utils_mod
 from bayesflow_irt.networks import MatrixEquivariantIRTSummary
 from bayesflow_irt.utils import (
     ChunkSearchOptions,
-    InferenceProfile,
     MemoryProbeReport,
     ProbeResult,
     TrainingMemoryConfig,
@@ -18,7 +17,6 @@ from bayesflow_irt.utils import (
     fit_with_oom_retry,
     is_oom_error,
     probe_memory_config,
-    profile_posterior_inference,
     safe_empty_cache,
     set_summary_memory_config,
 )
@@ -520,105 +518,6 @@ class TestTrainingMemoryConfigValidation:
     def test_accepts_valid_person_chunk_size(self):
         cfg = TrainingMemoryConfig(person_chunk_size=64)
         assert cfg.person_chunk_size == 64
-
-
-class TestInferenceProfile:
-    def test_profile_posterior_inference_breaks_down_sampling_path(self):
-        class FakeAdapter:
-            def __init__(self):
-                self.forward_calls = []
-                self.inverse_calls = []
-
-            def __call__(self, data, strict=True, inverse=False):
-                if inverse:
-                    self.inverse_calls.append((data, strict))
-                    return {"b": np.asarray(data["inference_variables"])[..., 0]}
-
-                self.forward_calls.append((data, strict))
-                if strict is False and not self.forward_calls[:-1]:
-                    raise ValueError(
-                        "Cannot call `forward` with `strict=False` before "
-                        "calling `forward` with `strict=True`."
-                    )
-                return {
-                    "summary_variables": np.asarray(
-                        data["responses"], dtype=np.float32
-                    ),
-                    "inference_conditions": np.asarray(data["meta"], dtype=np.float32),
-                }
-
-        class FakeSummary:
-            def __call__(self, x):
-                batch, _, items = x.shape
-                return np.zeros((batch, items, 3), dtype=np.float32)
-
-        class FakeInference:
-            def __init__(self):
-                self.calls = []
-
-            def sample(self, batch_shape, conditions=None, **kwargs):
-                cond_shape = tuple(
-                    keras.ops.convert_to_numpy(keras.ops.shape(conditions))
-                )
-                self.calls.append((batch_shape, cond_shape, kwargs))
-                n_cond, n_sample = batch_shape
-                return np.zeros((n_cond, n_sample, 1), dtype=np.float32)
-
-        class FakeApprox:
-            def __init__(self):
-                self.adapter = FakeAdapter()
-                self.summary_network = FakeSummary()
-                self.inference_network = FakeInference()
-                self.standardize_params = False
-                self._global_condition_dim = 2
-
-            @staticmethod
-            def _flatten_conditions(
-                summary_outputs, inference_conditions, batch_size, num_items
-            ):
-                flat_summary = keras.ops.reshape(
-                    summary_outputs, (batch_size * num_items, -1)
-                )
-                expanded = keras.ops.broadcast_to(
-                    inference_conditions[:, None, :],
-                    (batch_size, num_items, inference_conditions.shape[-1]),
-                )
-                flat_global = keras.ops.reshape(expanded, (batch_size * num_items, -1))
-                return keras.ops.concatenate([flat_summary, flat_global], axis=-1)
-
-        approx = FakeApprox()
-        conditions = {
-            "responses": np.zeros((2, 5, 3), dtype=np.float32),
-            "meta": np.ones((2, 2), dtype=np.float32),
-        }
-
-        profile = profile_posterior_inference(
-            approx,
-            conditions,
-            num_samples=5,
-            sample_chunk_size=2,
-            condition_chunk_size=4,
-            flow_sample_kwargs={"method": "euler", "steps": 24},
-        )
-
-        assert isinstance(profile, InferenceProfile)
-        assert profile.batch_size == 2
-        assert profile.num_items == 3
-        assert profile.flat_conditions == 6
-        assert profile.num_sample_chunks == 3
-        assert profile.num_condition_chunks == 2
-        assert profile.inference_sample_calls == 6
-        assert profile.output_shapes == {"b": (2, 5, 3)}
-        assert len(profile.summary_lines()) == 3
-        assert len(approx.inference_network.calls) == 6
-        assert all(
-            call[2] == {"method": "euler", "steps": 24}
-            for call in approx.inference_network.calls
-        )
-        assert approx.adapter.forward_calls[0][1] is False
-        assert approx.adapter.forward_calls[1][1] is True
-        assert approx.adapter.forward_calls[2][1] is False
-        assert approx.adapter.inverse_calls[0][1] is False
 
 
 class TestProbeMemoryConfig:
@@ -2372,31 +2271,6 @@ class TestFitWithOomRetry:
         assert approx.gradient_accumulation_steps == 2
         assert result.config.gradient_accumulation_steps == 2
 
-    def test_batch_halving_skips_accumulation_when_standardize_params(self):
-        """standardize_params=True forbids gradient_accumulation_steps > 1
-        (see EquivariantIRTApproximator.__init__), so the compensation step
-        must not engage — falls back to a plain batch-size cut."""
-
-        class FakeApprox:
-            gradient_accumulation_steps = 1
-            standardize_params = True
-
-            def fit(self, *, batch_size, **kwargs):
-                if batch_size == 32:
-                    raise RuntimeError("CUDA out of memory")
-                return _FakeHistory()
-
-        approx = FakeApprox()
-        result = fit_with_oom_retry(
-            approx,
-            None,
-            start_batch_size=32,
-            min_batch_size=8,
-            fit_kwargs=dict(epochs=1, num_batches=4),
-        )
-        assert result.batch_size == 16
-        assert approx.gradient_accumulation_steps == 1
-
     def test_batch_halving_skips_accumulation_when_attribute_absent(self):
         """Approximators without a gradient_accumulation_steps attribute at
         all (e.g. simplified test doubles) fall back to a plain cut too."""
@@ -2657,7 +2531,6 @@ class TestFitWithOomRetry:
     def test_oom_before_first_epoch_keeps_adam_step_consistent(self):
         """With a real Adam, an OOM before any completed epoch must not
         rewind the step counter that backs the retained moment slots."""
-        import keras
 
         def make():
             var = keras.Variable(np.zeros((1,), dtype="float32"))

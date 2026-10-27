@@ -128,7 +128,7 @@ def test_failed_oom_attempt_is_released_before_returning():
         def __init__(self):
             self.refs = []
 
-        def sample(self, conditions, num_samples):
+        def sample(self, conditions, num_samples, **kwargs):
             held = Holder()  # a local the traceback keeps alive
             self.refs.append(weakref.ref(held))
             raise torch.cuda.OutOfMemoryError("CUDA out of memory (fake)")
@@ -141,7 +141,7 @@ def test_failed_oom_attempt_is_released_before_returning():
             fake, SPEC_2PL, Cell(5, 10, True), _protocol(), chunk_size=4
         )
         assert entry["failed"]["stage"] == "sampling"
-        assert len(fake.refs) == 4  # sizes 4, 3, 2 and 1
+        assert len(fake.refs) > 4  # sizes 4, 3, 2, 1, then shrinking row batches
         assert all(ref() is None for ref in fake.refs)
     finally:
         if was_enabled:
