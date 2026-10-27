@@ -34,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   items sampled independently given the summary). In a 2PL comparison it was
   less calibrated than the autoregressive coupling flow, its draws made
   functionals across items (test characteristic curves) too narrow, and it
-  ran out of GPU memory in evaluation (#20). Models saved with it no longer
+  was slower and used more memory to sample (#20). Models saved with it no longer
   load; `from_config` says so and points to bayesflow-irt 0.2.
 - With it: `CalibratedIRTApproximator` and the `calibration` extra (the
   calibration loss supported only the independent item posterior),
