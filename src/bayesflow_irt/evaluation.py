@@ -143,6 +143,9 @@ def _auto_chunk_size(
 
     sizes = sorted({min(k, n) for k in PROBE_DATASETS})
     peaks: list = []
+    # Full collections cost about 0.1 s with a large model loaded: one
+    # before the probes, one before free memory is read.
+    gc.collect()
     for k in sizes:
         safe_empty_cache()
         base = torch.cuda.memory_allocated()
@@ -165,6 +168,7 @@ def _auto_chunk_size(
     per_dataset = peaks[0] / sizes[0]
     if len(sizes) > 1:
         per_dataset = max(per_dataset, (peaks[1] - peaks[0]) / (sizes[1] - sizes[0]))
+    gc.collect()
     safe_empty_cache()
     free = torch.cuda.mem_get_info()[0] + (
         torch.cuda.memory_reserved() - torch.cuda.memory_allocated()
@@ -370,6 +374,11 @@ def sample_posterior(
             oom = _drop_tracebacks(exc)
         if oom is None:
             start = stop
+            if start < n:
+                # A chunk can leave device tensors in reference cycles; freed
+                # only by the cycle collector, they would pile up chunk after
+                # chunk.
+                gc.collect()
             continue
         # Shrink outside the except block: the live traceback would otherwise
         # keep the failed attempt's device tensors allocated. Frames left in
