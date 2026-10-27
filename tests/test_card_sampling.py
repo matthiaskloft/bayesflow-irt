@@ -40,7 +40,7 @@ class FakeApproximator:
         self.calls = []
         self.generator = keras.random.SeedGenerator(0)
 
-    def sample(self, conditions, num_samples):
+    def sample(self, conditions, num_samples, **kwargs):
         n = conditions["responses"].shape[0]
         self.calls.append(n)
         if self.max_chunk is not None and n > self.max_chunk:
@@ -152,7 +152,9 @@ def test_out_of_memory_at_one_dataset_fails_the_cell():
     fake = FakeApproximator(max_chunk=0)
     with pytest.raises(CellFailedError) as info:
         sample_cell(fake, SPEC_2PL, Cell(5, 10, True), _protocol(), chunk_size=6)
-    assert fake.calls == [6, 4, 3, 2, 1]
+    # Datasets shrink to one, then that dataset's row batch shrinks to one.
+    assert fake.calls[:5] == [6, 4, 3, 2, 1]
+    assert set(fake.calls[5:]) == {1}
     assert info.value.record["size"] == 1
     cell = {"n_items": 5, "n_persons": 10, "in_range": True}
     assert info.value.record["cell"] == cell
@@ -260,7 +262,7 @@ def test_retry_runs_after_the_failed_attempt_is_released():
             self.alive_at_retry = []
             self.ref = None
 
-        def sample(self, conditions, num_samples):
+        def sample(self, conditions, num_samples, **kwargs):
             n = conditions["responses"].shape[0]
             if n > self.max_chunk:
                 held = Holder()  # stands in for activations on the failed frame
@@ -279,7 +281,7 @@ def test_retry_runs_after_the_failed_attempt_is_released():
 
 def test_other_errors_are_not_swallowed():
     class Broken(FakeApproximator):
-        def sample(self, conditions, num_samples):
+        def sample(self, conditions, num_samples, **kwargs):
             raise ValueError("not memory")
 
     with pytest.raises(ValueError, match="not memory"):

@@ -165,7 +165,6 @@ class TestApproximatorWorkflow:
         samples = approximator.sample(
             num_samples=128,
             conditions=test_data,
-            sample_chunk_size=32,
         )
 
         assert "a" in samples and "b" in samples
@@ -214,7 +213,6 @@ class TestApproximatorWorkflow:
         samples = approximator.sample(
             num_samples=96,
             conditions=test_data,
-            sample_chunk_size=24,
             condition_chunk_size=16,
         )
 
@@ -265,7 +263,6 @@ class TestApproximatorWorkflow:
         samples = approximator.sample(
             num_samples=32,
             conditions=conditions,
-            sample_chunk_size=16,
             condition_chunk_size=32,
         )
 

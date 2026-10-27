@@ -9,6 +9,7 @@ import keras
 import numpy as np
 import pytest
 from bayesflow.approximators.continuous_approximator import ContinuousApproximator
+from conftest import bare_model_init
 
 from bayesflow_irt.approximators import (
     EquivariantIRTApproximator,
@@ -17,7 +18,7 @@ from bayesflow_irt.approximators import (
 
 
 def _bare_approx(**kwargs) -> EquivariantIRTApproximator:
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         return EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),

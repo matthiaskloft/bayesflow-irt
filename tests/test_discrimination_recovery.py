@@ -76,7 +76,6 @@ def _fit_and_eval(
     samples = approx.sample(
         num_samples=120,
         conditions=eval_raw,
-        sample_chunk_size=40,
         condition_chunk_size=128,
     )
     pred_a = samples["a"].mean(axis=1)

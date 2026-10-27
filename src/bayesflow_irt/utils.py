@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import keras
-import keras.ops as ops
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -497,286 +496,6 @@ class TrainingMemoryConfig:
             raise ValueError("person_chunk_size must be a positive integer or None.")
 
 
-@dataclass
-class InferenceProfile:
-    """Timing breakdown for one posterior-sampling call.
-
-    This helper is intended for notebook-side profiling of
-    ``approximator.sample(...)``. It separates the main stages of the custom
-    IRT sampling path:
-
-    - raw-condition adaptation
-    - summary-network forward pass
-    - flow-based posterior sampling
-    - inverse adaptation back to user-facing parameter keys
-    """
-
-    num_samples: int
-    batch_size: int
-    num_items: int
-    flat_conditions: int
-    sample_chunk_size: int
-    condition_chunk_size: int
-    summary_batch_size: int | None
-    num_sample_chunks: int
-    num_condition_chunks: int
-    inference_sample_calls: int
-    adapter_s: float
-    summary_s: float
-    flow_sampling_s: float
-    inverse_adapter_s: float
-    total_profiled_s: float
-    output_shapes: dict[str, tuple[int, ...]]
-
-    def summary_lines(self) -> list[str]:
-        """Return a compact human-readable breakdown."""
-        lines = [
-            (
-                "Inference profile  "
-                f"batch={self.batch_size}  items={self.num_items}  "
-                f"draws={self.num_samples}  flat={self.flat_conditions}"
-            ),
-            (
-                "  chunks  "
-                f"sample={self.sample_chunk_size} ({self.num_sample_chunks})  "
-                f"condition={self.condition_chunk_size} ({self.num_condition_chunks})  "
-                f"calls={self.inference_sample_calls}"
-            ),
-            (
-                "  timings  "
-                f"adapter={self.adapter_s:.3f}s  "
-                f"summary={self.summary_s:.3f}s  "
-                f"flow={self.flow_sampling_s:.3f}s  "
-                f"inverse={self.inverse_adapter_s:.3f}s  "
-                f"total={self.total_profiled_s:.3f}s"
-            ),
-        ]
-        return lines
-
-
-def _sync_cuda_if_available() -> None:
-    """Synchronize CUDA when available so timings reflect actual work."""
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-    except (ImportError, RuntimeError):
-        return
-
-
-def _tensor_dim_as_int(x, axis: int) -> int:
-    """Resolve one tensor dimension to a concrete Python int."""
-    dim = x.shape[axis]
-    if dim is not None:
-        return int(dim)
-    shape = ops.convert_to_numpy(ops.shape(x))
-    return int(shape[axis])
-
-
-def _adapt_conditions_for_inference(approximator, conditions):
-    """Run the condition-only adapter path, priming strict mode if needed."""
-    try:
-        return approximator.adapter(conditions, strict=False)
-    except ValueError as exc:
-        msg = str(exc)
-        if "strict=False" not in msg or "strict=True" not in msg:
-            raise
-        approximator.adapter(conditions, strict=True)
-        return approximator.adapter(conditions, strict=False)
-
-
-def profile_posterior_inference(
-    approximator,
-    conditions,
-    *,
-    num_samples: int,
-    sample_chunk_size: int = 64,
-    condition_chunk_size: int = 256,
-    summary_batch_size: int | None = None,
-    flow_sample_kwargs: dict[str, Any] | None = None,
-) -> InferenceProfile:
-    """Profile posterior sampling for a fitted IRT approximator.
-
-    Parameters
-    ----------
-    approximator
-        A fitted ``EquivariantIRTApproximator`` (or compatible object exposing
-        the same adapter / summary / inference interfaces).
-    conditions
-        Raw simulator output or any condition payload accepted by
-        ``approximator.sample(conditions=...)``.
-    num_samples : int
-        Number of posterior draws per dataset/item.
-    sample_chunk_size : int
-        Sampling-time chunk size over the draw axis.
-    condition_chunk_size : int
-        Sampling-time chunk size over the flattened ``batch × items`` axis.
-    summary_batch_size : int or None
-        Optional batch chunking for the summary-network forward pass.
-    flow_sample_kwargs : dict or None
-        Extra keyword arguments forwarded to ``inference_network.sample(...)``.
-        For ``FlowMatching`` networks, use this to compare solver settings
-        such as ``{"method": "euler", "steps": 24}``.
-
-    Returns
-    -------
-    InferenceProfile
-        Timing breakdown plus chunk/call counts and output shapes.
-    """
-    if getattr(approximator, "autoregressive", False):
-        raise NotImplementedError(
-            "profile_posterior_inference does not support "
-            "item_posterior='autoregressive_coupling_flow'."
-        )
-    if int(num_samples) <= 0:
-        raise ValueError("num_samples must be a positive integer.")
-    if int(sample_chunk_size) <= 0:
-        raise ValueError("sample_chunk_size must be a positive integer.")
-    if int(condition_chunk_size) <= 0:
-        raise ValueError("condition_chunk_size must be a positive integer.")
-    if summary_batch_size is not None and int(summary_batch_size) <= 0:
-        raise ValueError("summary_batch_size must be a positive integer or None.")
-    if flow_sample_kwargs is None:
-        flow_sample_kwargs = {}
-    elif not isinstance(flow_sample_kwargs, dict):
-        raise TypeError("flow_sample_kwargs must be a dict or None.")
-
-    sample_chunk_size = int(sample_chunk_size)
-    condition_chunk_size = int(condition_chunk_size)
-    num_samples = int(num_samples)
-    if summary_batch_size is not None:
-        summary_batch_size = int(summary_batch_size)
-
-    _sync_cuda_if_available()
-    t0 = time.perf_counter()
-    adapted = _adapt_conditions_for_inference(approximator, conditions)
-    adapted = {k: ops.convert_to_tensor(v) for k, v in adapted.items()}
-    _sync_cuda_if_available()
-    t1 = time.perf_counter()
-
-    summary_variables = adapted.get("summary_variables")
-    inference_conditions = adapted.get("inference_conditions")
-
-    if summary_batch_size is None:
-        summary_outputs = approximator.summary_network(summary_variables)
-    else:
-        total_batch = _tensor_dim_as_int(summary_variables, 0)
-        outs = []
-        for start in range(0, total_batch, summary_batch_size):
-            end = min(start + summary_batch_size, total_batch)
-            outs.append(approximator.summary_network(summary_variables[start:end]))
-        summary_outputs = ops.concatenate(outs, axis=0)
-    _sync_cuda_if_available()
-    t2 = time.perf_counter()
-
-    batch_size = _tensor_dim_as_int(summary_outputs, 0)
-    num_items = _tensor_dim_as_int(summary_outputs, 1)
-    flat_n = batch_size * num_items
-
-    global_condition_dim = int(getattr(approximator, "_global_condition_dim", 0))
-    if inference_conditions is None and global_condition_dim > 0:
-        inference_conditions = ops.zeros(
-            (batch_size, global_condition_dim),
-            dtype=keras.ops.dtype(summary_outputs),
-        )
-
-    flat_conditions = approximator._flatten_conditions(
-        summary_outputs,
-        inference_conditions,
-        batch_size,
-        num_items,
-    )
-
-    condition_chunks = []
-    inference_sample_calls = 0
-    for cond_start in range(0, flat_n, condition_chunk_size):
-        n_cond = min(condition_chunk_size, flat_n - cond_start)
-        flat_conditions_cond = flat_conditions[cond_start : cond_start + n_cond]
-
-        sample_chunks = []
-        for sample_start in range(0, num_samples, sample_chunk_size):
-            n_sample = min(sample_chunk_size, num_samples - sample_start)
-            flat_conditions_chunk = ops.expand_dims(flat_conditions_cond, axis=1)
-            flat_conditions_chunk = ops.broadcast_to(
-                flat_conditions_chunk,
-                (n_cond, n_sample, ops.shape(flat_conditions_cond)[-1]),
-            )
-            chunk = approximator.inference_network.sample(
-                (n_cond, n_sample),
-                conditions=flat_conditions_chunk,
-                **flow_sample_kwargs,
-            )
-            sample_chunks.append(chunk)
-            inference_sample_calls += 1
-
-        condition_chunks.append(ops.concatenate(sample_chunks, axis=1))
-
-    samples = ops.concatenate(condition_chunks, axis=0)
-    param_dim = _tensor_dim_as_int(samples, -1)
-
-    if getattr(approximator, "standardize_params", False):
-        flat_samples = ops.reshape(samples, (-1, param_dim))
-        flat_samples = approximator._flat_standardize(
-            flat_samples,
-            stage="inference",
-            forward=False,
-        )
-        samples = ops.reshape(flat_samples, (flat_n, num_samples, param_dim))
-
-    samples = ops.reshape(samples, (batch_size, num_items, num_samples, param_dim))
-    samples = ops.transpose(samples, axes=(0, 2, 1, 3))
-    _sync_cuda_if_available()
-    t3 = time.perf_counter()
-
-    samples_np = ops.convert_to_numpy(samples)
-    out = approximator.adapter(
-        {"inference_variables": samples_np},
-        inverse=True,
-        strict=False,
-    )
-
-    is_loading = (
-        getattr(approximator.adapter, "_bayesflow_irt_internal_parameterization", None)
-        == "loading"
-    )
-    if (
-        is_loading
-        and isinstance(out, dict)
-        and "d" not in out
-        and "a" in out
-        and "b" in out
-    ):
-        out = dict(out)
-        out["d"] = -(np.asarray(out["a"]) * np.asarray(out["b"]))
-
-    _sync_cuda_if_available()
-    t4 = time.perf_counter()
-
-    output_shapes = {k: tuple(np.asarray(v).shape) for k, v in out.items()}
-    num_condition_chunks = int(np.ceil(flat_n / condition_chunk_size))
-    num_sample_chunks = int(np.ceil(num_samples / sample_chunk_size))
-
-    return InferenceProfile(
-        num_samples=num_samples,
-        batch_size=batch_size,
-        num_items=num_items,
-        flat_conditions=flat_n,
-        sample_chunk_size=sample_chunk_size,
-        condition_chunk_size=condition_chunk_size,
-        summary_batch_size=summary_batch_size,
-        num_sample_chunks=num_sample_chunks,
-        num_condition_chunks=num_condition_chunks,
-        inference_sample_calls=inference_sample_calls,
-        adapter_s=t1 - t0,
-        summary_s=t2 - t1,
-        flow_sampling_s=t3 - t2,
-        inverse_adapter_s=t4 - t3,
-        total_profiled_s=t4 - t0,
-        output_shapes=output_shapes,
-    )
-
-
 # -- Probe implementation ---------------------------------------------------
 
 
@@ -813,13 +532,11 @@ def _build_probe_approximator(approximator):
         adapter=approximator.adapter,
         inference_network=clone_inference,
         summary_network=clone_summary,
-        standardize_params=getattr(approximator, "standardize_params", False),
         flow_chunk_size=getattr(approximator, "flow_chunk_size", None),
         flow_chunk_backward=getattr(approximator, "flow_chunk_backward", None),
         gradient_accumulation_steps=getattr(
             approximator, "gradient_accumulation_steps", 1
         ),
-        item_posterior=getattr(approximator, "item_posterior", "flow_matching"),
         draws_summary_pooling=getattr(approximator, "draws_summary_pooling", "mean"),
         draws_summary_hidden_dim=getattr(approximator, "draws_summary_hidden_dim", 32),
         draws_summary_dim=getattr(approximator, "draws_summary_dim", 32),
@@ -1928,13 +1645,11 @@ def fit_with_oom_retry(
        *effective* batch size (``batch_size x gradient_accumulation_steps``)
        constant — no calibration effect, just a smaller physical microbatch.
        Only engaged when the approximator already exposes a mutable
-       ``gradient_accumulation_steps`` attribute and does *not* have
-       ``standardize_params=True`` (accumulation would double-advance the
-       running statistics of standardization layers).
+       ``gradient_accumulation_steps`` attribute.
     4. **Plain halve ``batch_size``** (an actual effective-batch-size cut,
        the step that can affect calibration) when step 3's compensation is
        unavailable — the fallback for approximators without a settable
-       ``gradient_accumulation_steps`` or with ``standardize_params=True``.
+       ``gradient_accumulation_steps``.
 
     Each batch-size step restarts the chunk ladders -- from ``None`` for
     ``item_chunk_size``, and from ``None`` (default) or
@@ -2160,7 +1875,6 @@ def fit_with_oom_retry(
     # (step 4), matching this function's behavior without person chunking exactly.
     can_compensate_with_accumulation = (
         hasattr(approximator, "gradient_accumulation_steps")
-        and not getattr(approximator, "standardize_params", False)
         and keras.backend.backend() == "torch"
     )
 
@@ -2539,9 +2253,7 @@ def fit_with_oom_retry(
                 )
             else:
                 if not can_compensate_with_accumulation:
-                    if getattr(approximator, "standardize_params", False):
-                        reason = "standardize_params=True"
-                    elif keras.backend.backend() != "torch":
+                    if keras.backend.backend() != "torch":
                         reason = (
                             "gradient_accumulation_steps > 1 is only "
                             "implemented on the torch backend"

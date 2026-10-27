@@ -13,8 +13,6 @@ from bayesflow_irt import (
     make_2pl_simulator,
 )
 
-_AR = "autoregressive_coupling_flow"
-
 
 def _simulator(n_items=(3, 6), n_persons=(8, 12)):
     return make_2pl_simulator(
@@ -26,8 +24,11 @@ def _simulator(n_items=(3, 6), n_persons=(8, 12)):
     )
 
 
-def _make(simulator, **kw):
-    kw.setdefault("item_posterior", _AR)
+def _make(simulator, inference_network=None, **kw):
+    if inference_network is None:
+        inference_network = bf.networks.CouplingFlow(
+            depth=2, subnet_kwargs={"widths": (16, 16)}
+        )
     return EquivariantIRTApproximator(
         adapter=make_2pl_adapter(simulator),
         summary_network=MatrixEquivariantIRTSummary(
@@ -38,9 +39,7 @@ def _make(simulator, **kw):
             outer_embed_dim=8,
             outer_mlp_width=16,
         ),
-        inference_network=bf.networks.CouplingFlow(
-            depth=2, subnet_kwargs={"widths": (16, 16)}
-        ),
+        inference_network=inference_network,
         draws_summary_hidden_dim=8,
         draws_summary_dim=8,
         **kw,
@@ -63,25 +62,51 @@ def built(request):
     return simulator, approximator
 
 
-def test_default_is_flow_matching():
+@pytest.mark.parametrize("item_posterior", [None, "flow_matching"])
+def test_independent_item_posterior_config_is_rejected(item_posterior):
+    """Configs saved with the removed independent item posterior fail clearly."""
+    approximator = _make(_simulator())
+    config = approximator.get_config()
+    assert config["item_posterior"] == "autoregressive_coupling_flow"
+    if item_posterior is None:
+        del config["item_posterior"]
+    else:
+        config["item_posterior"] = item_posterior
+    with pytest.raises(ValueError, match="independent item posterior"):
+        EquivariantIRTApproximator.from_config(config)
+
+
+def test_flow_matching_trains_samples_and_reloads(tmp_path):
+    """A FlowMatching per-item flow works in the autoregressive loop."""
     simulator = _simulator()
-    approximator = EquivariantIRTApproximator(
-        adapter=make_2pl_adapter(simulator),
-        summary_network=MatrixEquivariantIRTSummary(embed_dim=8),
-        inference_network=bf.networks.FlowMatching(),
+    approximator = _make(
+        simulator,
+        inference_network=bf.networks.FlowMatching(
+            subnet_kwargs={"widths": (16, 16)},
+            integrate_kwargs={"method": "euler", "steps": 2},
+        ),
     )
-    assert approximator.item_posterior == "flow_matching"
-    assert approximator.draws_summary is None
+    approximator.compile(optimizer="adam")
+    history = approximator.fit(
+        simulator=simulator,
+        epochs=1,
+        num_batches=2,
+        batch_size=4,
+        workers=1,
+        verbose=False,
+    )
+    assert np.all(np.isfinite(history.history["loss"]))
 
+    data = simulator.sample((2,))
+    out = approximator.sample(num_samples=3, conditions=data)
+    assert out["a"].shape == (2, 3, data["a"].shape[-1])
+    assert np.all(np.isfinite(out["a"]))
 
-def test_invalid_item_posterior():
-    with pytest.raises(ValueError, match="item_posterior"):
-        _make(_simulator(), item_posterior="nope")
-
-
-def test_rejects_standardize_params():
-    with pytest.raises(ValueError, match="standardize_params"):
-        _make(_simulator(), standardize_params=True)
+    path = tmp_path / "ar_fm.keras"
+    approximator.save(path)
+    restored = keras.saving.load_model(path)
+    assert isinstance(restored.inference_network, bf.networks.FlowMatching)
+    assert np.all(np.isfinite(restored.sample(num_samples=2, conditions=data)["b"]))
 
 
 @pytest.mark.parametrize("n_items,n_persons", [(13, 7), (4, 5), (1, 3)])
@@ -147,6 +172,39 @@ def test_sampling_conditions_match_teacher_forcing(built, monkeypatch, row_chunk
     np.testing.assert_allclose(conds, expected, atol=1e-5)
 
 
+def test_default_row_chunk_is_large_and_capped(built, monkeypatch):
+    """By default all (dataset, draw) rows go through one flow call per item,
+    up to ``AR_ROW_CHUNK_SIZE`` rows. A flow call costs about the same for 1
+    or thousands of rows, so the old default of 256 rows made sampling 15-70x
+    slower than one chunk."""
+    from bayesflow_irt import approximators as approximators_module
+
+    simulator, approximator = built  # 10 items
+    adapted = _adapted(approximator, simulator.sample((2,)))
+    flow = approximator.inference_network
+    real_sample = flow.sample
+    rows = []
+
+    def spy(batch_shape, **kwargs):
+        rows.append(batch_shape[0])
+        return real_sample(batch_shape, **kwargs)
+
+    monkeypatch.setattr(flow, "sample", spy)
+
+    def draw():
+        rows.clear()
+        approximator._sample(
+            300,
+            summary_variables=adapted["summary_variables"],
+            inference_conditions=adapted["inference_conditions"],
+        )
+        return list(rows)
+
+    assert draw() == [600] * 10
+    monkeypatch.setattr(approximators_module, "AR_ROW_CHUNK_SIZE", 256)
+    assert draw() == [256] * 10 + [256] * 10 + [88] * 10
+
+
 @pytest.mark.parametrize("pooling", _POOLINGS)
 def test_fit_save_load(tmp_path, pooling):
     simulator = _simulator(n_items=(2, 6), n_persons=(5, 12))
@@ -165,7 +223,6 @@ def test_fit_save_load(tmp_path, pooling):
     path = tmp_path / "ar.keras"
     approximator.save(path)
     restored = keras.saving.load_model(path)
-    assert restored.item_posterior == _AR
     assert restored.draws_summary_pooling == pooling
 
     data = simulator.sample((3,))
@@ -229,17 +286,6 @@ def test_invalid_draws_summary_pooling():
         _make(_simulator(), draws_summary_pooling="sum")
 
 
-def test_requires_coupling_flow():
-    simulator = _simulator()
-    with pytest.raises(TypeError, match="CouplingFlow"):
-        EquivariantIRTApproximator(
-            adapter=make_2pl_adapter(simulator),
-            summary_network=MatrixEquivariantIRTSummary(embed_dim=8),
-            inference_network=bf.networks.FlowMatching(),
-            item_posterior=_AR,
-        )
-
-
 @pytest.mark.parametrize(
     "kw",
     [
@@ -283,7 +329,6 @@ def test_one_pl():
             embed_dim=8, matrix_hidden_dim=8, num_matrix_blocks=1, num_outer_sabs=1
         ),
         inference_network=bf.networks.CouplingFlow(depth=2),
-        item_posterior=_AR,
         draws_summary_hidden_dim=8,
         draws_summary_dim=8,
     )
@@ -303,31 +348,11 @@ def test_one_pl():
 
 
 def test_utils_paths(built):
-    from bayesflow_irt.utils import (
-        _build_probe_approximator,
-        profile_posterior_inference,
-    )
+    from bayesflow_irt.utils import _build_probe_approximator
 
-    simulator, approximator = built
+    _, approximator = built
     clone = _build_probe_approximator(approximator)
-    assert clone.item_posterior == _AR
     assert clone.draws_summary_dim == approximator.draws_summary_dim
-    with pytest.raises(NotImplementedError):
-        profile_posterior_inference(approximator, simulator.sample((1,)), num_samples=2)
-
-
-def test_calibrated_rejects_autoregressive():
-    pytest.importorskip("bayesflow_calibration_loss")
-    from bayesflow_irt import CalibratedIRTApproximator
-
-    simulator = _simulator()
-    with pytest.raises(NotImplementedError):
-        CalibratedIRTApproximator(
-            adapter=make_2pl_adapter(simulator),
-            summary_network=MatrixEquivariantIRTSummary(embed_dim=8),
-            inference_network=bf.networks.CouplingFlow(),
-            item_posterior=_AR,
-        )
 
 
 def test_integer_seed_does_not_repeat_streams(built):

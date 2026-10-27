@@ -8,6 +8,7 @@ os.environ.setdefault("KERAS_BACKEND", "torch")
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import bayesflow as bf
 import numpy as np
 import pytest
 
@@ -1247,6 +1248,7 @@ class TestValidateFnFlowSampleKwargs:
     @staticmethod
     def _mock_approx():
         mock_approx = MagicMock()
+        mock_approx.inference_network = MagicMock(spec=bf.networks.FlowMatching)
         mock_approx.sample.return_value = {
             "a": np.abs(np.random.randn(4, 10, 3)) + 0.1,
             "b": np.random.randn(4, 10, 3),
@@ -1260,6 +1262,7 @@ class TestValidateFnFlowSampleKwargs:
             corners=[(3, 20)],
             param_keys=["a", "b"],
             sims_per_corner=4,
+            flow="flow_matching",
             **kwargs,
         )
 

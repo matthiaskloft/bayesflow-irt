@@ -9,11 +9,10 @@ import keras
 import numpy as np
 import pytest
 from bayesflow.approximators.continuous_approximator import ContinuousApproximator
-from conftest import strip_registered_name_prefixes
+from conftest import bare_model_init, strip_registered_name_prefixes
 
 from bayesflow_irt.adapters import make_2pl_adapter
 from bayesflow_irt.approximators import EquivariantIRTApproximator
-from bayesflow_irt.calibration import CalibratedIRTApproximator
 from bayesflow_irt.networks import MatrixEquivariantIRTSummary
 from bayesflow_irt.priors import Prior
 from bayesflow_irt.simulators import make_2pl_simulator
@@ -22,7 +21,7 @@ from bayesflow_irt.simulators import make_2pl_simulator
 def test_init_accepts_legacy_standardize_kwarg() -> None:
     """Constructor should tolerate serialized `standardize` kwargs."""
     with patch.object(
-        ContinuousApproximator, "__init__", return_value=None
+        ContinuousApproximator, "__init__", autospec=True, side_effect=bare_model_init
     ) as super_init:
         EquivariantIRTApproximator(
             adapter=MagicMock(),
@@ -38,7 +37,7 @@ def test_init_accepts_legacy_standardize_kwarg() -> None:
 
 def test_sample_accepts_positional_conditions_and_n_samples_alias() -> None:
     """sample() should support legacy call patterns used by downstream code."""
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -65,20 +64,8 @@ def test_sample_accepts_positional_conditions_and_n_samples_alias() -> None:
     assert out["d"].shape == (1, 5, 3, 1)
 
 
-def test_init_rejects_standardize_with_gradient_accumulation() -> None:
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
-        with pytest.raises(ValueError):
-            EquivariantIRTApproximator(
-                adapter=MagicMock(),
-                inference_network=MagicMock(),
-                summary_network=MagicMock(),
-                standardize_params=True,
-                gradient_accumulation_steps=2,
-            )
-
-
 def test_sample_summary_batch_size_chunks_summary_forward() -> None:
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -105,15 +92,14 @@ def test_sample_summary_batch_size_chunks_summary_forward() -> None:
 
     approx.summary_network = SummaryNet()
     approx.inference_network = InferenceNet()
-    approx.standardize_params = False
     approx._global_condition_dim = 0
+    approx.draws_summary.build((None, None, 1), (None, None, 3))
 
     summary_variables = keras.ops.zeros((3, 4, 2), dtype="float32")
     out = approx._sample(
         num_samples=4,
         summary_variables=summary_variables,
         summary_batch_size=1,
-        sample_chunk_size=2,
         condition_chunk_size=2,
         flow_sample_kwargs={"method": "euler", "steps": 16},
     )
@@ -128,7 +114,7 @@ def test_sample_summary_batch_size_chunks_summary_forward() -> None:
 
 
 def test_init_rejects_per_chunk_backward_mode() -> None:
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         with pytest.raises(ValueError, match="per_chunk"):
             EquivariantIRTApproximator(
                 adapter=MagicMock(),
@@ -139,7 +125,7 @@ def test_init_rejects_per_chunk_backward_mode() -> None:
 
 
 def test_init_normalizes_legacy_none_backward_mode() -> None:
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -151,7 +137,7 @@ def test_init_normalizes_legacy_none_backward_mode() -> None:
 
 
 def test_chunked_weighted_loss_equals_unchunked_weighted_loss() -> None:
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -208,7 +194,7 @@ def test_checkpoint_chunking_preserves_summary_gradient_path() -> None:
 
     import torch
 
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -245,7 +231,7 @@ def test_checkpoint_chunking_preserves_summary_gradient_path() -> None:
 
 def test_chunked_loss_equals_unchunked_loss() -> None:
     """Chunked weighted-average loss must equal the plain per-sample mean."""
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -313,7 +299,7 @@ def test_gradient_accumulation_applies_at_correct_cadence() -> None:
 
     import torch
 
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -370,7 +356,7 @@ def test_gradient_accumulation_matches_large_batch_gradient() -> None:
 
     import torch
 
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -440,7 +426,7 @@ def test_gradient_accumulation_clears_state_on_exception() -> None:
 
     import torch
 
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -490,7 +476,7 @@ def test_gradient_accumulation_clears_state_on_exception() -> None:
 
 def test_epoch_end_flushes_partial_accumulation() -> None:
     """The flush discards unfinished micro-steps without applying gradients."""
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),
@@ -617,7 +603,6 @@ def test_equivariant_approximator_save_load_restores_sampling_state(tmp_path) ->
     [
         EquivariantIRTApproximator,
         MatrixEquivariantIRTSummary,
-        CalibratedIRTApproximator,
     ],
 )
 def test_public_classes_are_registered_keras_serializables(cls) -> None:
@@ -738,7 +723,7 @@ def test_gradient_accumulation_resets_at_epoch_boundary_in_real_fit() -> None:
 @pytest.mark.parametrize("chunk_size", [None, 4])
 def test_compute_metrics_broadcasts_per_dataset_sample_weight(chunk_size) -> None:
     """Per-dataset weights (B,) are repeated over items in flatten order."""
-    with patch.object(ContinuousApproximator, "__init__", return_value=None):
+    with patch.object(ContinuousApproximator, "__init__", bare_model_init):
         approx = EquivariantIRTApproximator(
             adapter=MagicMock(),
             inference_network=MagicMock(),

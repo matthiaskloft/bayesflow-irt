@@ -5,8 +5,7 @@ for running Optuna-based hyperparameter optimization on IRT approximators
 via :func:`bayesflow_hpo.optimize`.
 
 Requires the ``hpo`` extra: ``pip install bayesflow-irt[hpo]``. This module
-always imports cleanly (mirroring :mod:`bayesflow_irt.calibration`'s
-import-safe pattern for the optional calibration extra); the clear
+always imports cleanly; the clear
 ``ImportError`` is raised lazily, at the first call to :func:`make_irt_hooks`
 or :func:`make_irt_validation_dataset`, not at module-import time.
 
@@ -49,6 +48,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, NamedTuple
 
+import bayesflow as bf
 import keras
 import numpy as np
 
@@ -144,6 +144,7 @@ except ImportError as exc:
 
     BaseSearchSpace = _BaseSearchSpacePlaceholder
     CouplingFlowSpace = _BaseSearchSpacePlaceholder
+    FlowMatchingSpace = _BaseSearchSpacePlaceholder
 else:
     _BAYESFLOW_HPO_IMPORT_ERROR = None
     # Registered here, matching how `bayesflow_hpo` registers `tarp_error`
@@ -421,50 +422,42 @@ def _dimension_values(dim: Any) -> list[Any]:
     return list(range(dim.low, dim.high + 1, dim.step or 1))
 
 
-#: Item posteriors an approximator can be built with.
-ITEM_POSTERIORS = ("flow_matching", "autoregressive_coupling_flow")
+#: Per-item flows the autoregressive item posterior can be built with.
+FLOWS = ("coupling_flow", "flow_matching")
 
 
-def normalize_item_posterior(item_posterior: str | Sequence[str]) -> tuple[str, ...]:
-    """Return the item-posterior families an ``item_posterior`` value names.
+def normalize_flow(flow: str | Sequence[str]) -> tuple[str, ...]:
+    """Return the per-item flows a ``flow`` value names.
 
-    A string pins one family; a list of two or more is searched as a
-    categorical ``item_posterior`` dimension (a one-element list pins its
-    family, like the bare string).
+    A string pins one flow; a list of two or more is searched as a
+    categorical ``flow`` dimension (a one-element list pins its flow, like
+    the bare string).
 
     Raises
     ------
     ValueError
-        If the value is empty, repeats a family, or names an unknown one.
+        If the value is empty, repeats a flow, or names an unknown one.
     """
-    families = (
-        (item_posterior,) if isinstance(item_posterior, str) else tuple(item_posterior)
-    )
-    if (
-        not families
-        or len(set(families)) != len(families)
-        or not set(families) <= set(ITEM_POSTERIORS)
-    ):
+    flows = (flow,) if isinstance(flow, str) else tuple(flow)
+    if not flows or len(set(flows)) != len(flows) or not set(flows) <= set(FLOWS):
         raise ValueError(
-            f"item_posterior must be one of {ITEM_POSTERIORS} or a non-empty "
-            f"list of distinct ones, got {item_posterior!r}."
+            f"flow must be one of {FLOWS} or a non-empty list of distinct "
+            f"ones, got {flow!r}."
         )
-    return families
+    return flows
 
 
 @dataclass
-class AutoregressiveCouplingFlowSpace(CouplingFlowSpace):
-    """Search space for ``item_posterior="autoregressive_coupling_flow"``.
+class _DrawsSummaryDims:
+    """Draws-summary dimensions shared by the per-item flow spaces.
 
-    The ``cf_*`` dimensions of ``bayesflow_hpo``'s ``CouplingFlowSpace``
-    (the per-item flow, built by :meth:`build`) plus the draws summary that
-    conditions item ``i`` on the earlier draws (see
-    :class:`~bayesflow_irt.EquivariantIRTApproximator`). The draws-summary
-    values are read by :meth:`draws_summary_kwargs`, which
-    :func:`make_irt_hooks` passes to the approximator.
+    The draws summary conditions item ``i`` on the earlier draws (see
+    :class:`~bayesflow_irt.EquivariantIRTApproximator`). Its values are read
+    by :meth:`draws_summary_kwargs`, which :func:`make_irt_hooks` passes to
+    the approximator.
 
-    Dimensions (in addition to ``CouplingFlowSpace``'s)
-    ---------------------------------------------------
+    Dimensions
+    ----------
     draws_summary_pooling : str
         ``"mean"`` (Habermann et al., 2026), ``"mean_std"``, ``"mean_max"``
         (Corso et al., 2020), ``"attention"`` or ``"pma"`` (Lee et al., 2019).
@@ -528,85 +521,106 @@ class AutoregressiveCouplingFlowSpace(CouplingFlowSpace):
 
 
 @dataclass
-class ItemPosteriorChoiceSpace:
-    """Search the item posterior itself over the listed families.
+class AutoregressiveCouplingFlowSpace(_DrawsSummaryDims, CouplingFlowSpace):
+    """Search space for a ``CouplingFlow`` per-item flow.
 
-    Samples a categorical ``item_posterior`` dimension over ``families``
-    first, then only the chosen family's dimensions (Optuna's define-by-run
-    sampling), so a trial's parameters name one family: ``fm_*`` or
-    ``cf_*`` plus ``draws_summary_*``. One study then holds one Pareto front
-    over the listed families, trained and validated on the same data.
+    The ``cf_*`` dimensions of ``bayesflow_hpo``'s ``CouplingFlowSpace``
+    (the flow, built by :meth:`build`) plus the ``draws_summary_*``
+    dimensions of :class:`_DrawsSummaryDims`.
+    """
 
-    The parameter is named ``item_posterior`` rather than bayesflow-hpo's
-    ``NetworkSelectionSpace`` key ``inference_network_type`` because it
-    selects the approximator's factorization, not only the network.
+
+@dataclass
+class AutoregressiveFlowMatchingSpace(_DrawsSummaryDims, FlowMatchingSpace):
+    """Search space for a ``FlowMatching`` per-item flow.
+
+    The ``fm_*`` dimensions of ``bayesflow_hpo``'s ``FlowMatchingSpace``
+    (the flow, built by :meth:`build`) plus the ``draws_summary_*``
+    dimensions of :class:`_DrawsSummaryDims`. Sampling solves one ODE per
+    item, so it is slower than a coupling flow.
+    """
+
+
+#: Search space class of each name in :data:`FLOWS`.
+_FLOW_SPACES = {
+    "coupling_flow": AutoregressiveCouplingFlowSpace,
+    "flow_matching": AutoregressiveFlowMatchingSpace,
+}
+
+
+@dataclass
+class FlowChoiceSpace:
+    """Search the per-item flow itself over the listed flows.
+
+    Samples a categorical ``flow`` dimension over ``flows`` first, then only
+    the chosen flow's dimensions (Optuna's define-by-run sampling), so a
+    trial's parameters name one flow: ``cf_*`` or ``fm_*``, plus the shared
+    ``draws_summary_*``. One study then holds one Pareto front over the
+    listed flows, trained and validated on the same data.
 
     Parameters
     ----------
-    flow_matching : FlowMatchingSpace
+    coupling_flow : AutoregressiveCouplingFlowSpace
+        Space searched when the trial picks ``"coupling_flow"``.
+    flow_matching : AutoregressiveFlowMatchingSpace
         Space searched when the trial picks ``"flow_matching"``.
-    autoregressive_coupling_flow : AutoregressiveCouplingFlowSpace
-        Space searched when the trial picks ``"autoregressive_coupling_flow"``.
-    families : tuple of str
-        Families the categorical chooses from, in this order (any distinct
-        subset of :data:`ITEM_POSTERIORS`). Defaults to all of them. A single
-        family pins the choice (used to dry-run each family in the pipeline check).
+    flows : tuple of str
+        Flows the categorical chooses from, in this order (any distinct
+        subset of :data:`FLOWS`). Defaults to all of them. A single flow pins
+        the choice (used to dry-run each flow in the pipeline check).
     """
 
-    flow_matching: Any = field(default_factory=lambda: FlowMatchingSpace())
-    autoregressive_coupling_flow: Any = field(
+    coupling_flow: Any = field(
         default_factory=lambda: AutoregressiveCouplingFlowSpace()
     )
-    families: tuple[str, ...] = ITEM_POSTERIORS
+    flow_matching: Any = field(
+        default_factory=lambda: AutoregressiveFlowMatchingSpace()
+    )
+    flows: tuple[str, ...] = FLOWS
 
     def __post_init__(self) -> None:
-        self.families = normalize_item_posterior(self.families)
-        if not isinstance(
-            self.autoregressive_coupling_flow, AutoregressiveCouplingFlowSpace
-        ):
-            raise TypeError(
-                "autoregressive_coupling_flow must be an "
-                "AutoregressiveCouplingFlowSpace, got "
-                f"{type(self.autoregressive_coupling_flow).__name__}."
-            )
-        if isinstance(self.flow_matching, AutoregressiveCouplingFlowSpace):
-            raise TypeError(
-                "flow_matching must not be an AutoregressiveCouplingFlowSpace."
-            )
+        self.flows = normalize_flow(self.flows)
+        for name, cls in _FLOW_SPACES.items():
+            space = getattr(self, name)
+            if not isinstance(space, cls):
+                raise TypeError(
+                    f"{name} must be an {cls.__name__}, got {type(space).__name__}."
+                )
 
-    def _space(self, item_posterior: str) -> Any:
-        if item_posterior not in self.families:
-            raise ValueError(
-                f"item_posterior must be one of {self.families}, "
-                f"got {item_posterior!r}."
-            )
-        return getattr(self, item_posterior)
+    def _space(self, flow: str) -> Any:
+        if flow not in self.flows:
+            raise ValueError(f"flow must be one of {self.flows}, got {flow!r}.")
+        return getattr(self, flow)
 
     @property
     def dimensions(self) -> list[Any]:
-        """The choice dimension plus the listed families' dimensions."""
-        return [
-            CategoricalDimension("item_posterior", choices=list(self.families)),
-            *(d for fam in self.families for d in getattr(self, fam).dimensions),
-        ]
+        """The choice dimension plus the listed flows' dimensions.
+
+        The ``draws_summary_*`` dimensions both flows carry are listed once.
+        """
+        dims: dict[str, Any] = {}
+        for name in self.flows:
+            for dim in getattr(self, name).dimensions:
+                dims.setdefault(dim.name, dim)
+        return [CategoricalDimension("flow", choices=list(self.flows)), *dims.values()]
 
     @property
     def constants(self) -> dict[str, Any]:
-        """The listed families' pinned dimensions (their names do not overlap)."""
+        """The listed flows' pinned dimensions."""
         return {
             k: v
-            for fam in self.families
-            for k, v in getattr(getattr(self, fam), "constants", {}).items()
+            for name in self.flows
+            for k, v in getattr(getattr(self, name), "constants", {}).items()
         }
 
     def sample(self, trial: Any) -> dict[str, Any]:
-        """Sample the family, then that family's dimensions."""
-        choice = trial.suggest_categorical("item_posterior", list(self.families))
-        return {"item_posterior": choice, **self._space(choice).sample(trial)}
+        """Sample the flow, then that flow's dimensions."""
+        choice = trial.suggest_categorical("flow", list(self.flows))
+        return {"flow": choice, **self._space(choice).sample(trial)}
 
     def build(self, params: dict[str, Any]) -> Any:
-        """Build the inference network of ``params["item_posterior"]``."""
-        return self._space(params["item_posterior"]).build(params)
+        """Build the per-item flow of ``params["flow"]``."""
+        return self._space(params["flow"]).build(params)
 
 
 # ---------------------------------------------------------------------------
@@ -1984,7 +1998,7 @@ def make_irt_hooks(
     flow_sample_kwargs: Mapping[str, Any] | None = None,
     validation_chunk_size: int | Literal["auto"] = "auto",
     run_pipeline_check: bool = False,
-    item_posterior: str | Sequence[str] = "flow_matching",
+    flow: str | Sequence[str] = "coupling_flow",
 ) -> IRTHooks:
     """Create HPO hooks for an IRT model.
 
@@ -2075,12 +2089,11 @@ def make_irt_hooks(
         upstream, so this affects custom metrics only; either register a
         direction or pass ``aggregate="mean"``.
     inference_space : BaseSearchSpace or None
-        Inference network search space.  Defaults to
-        ``FlowMatchingSpace()``, or to
-        :class:`AutoregressiveCouplingFlowSpace` when ``item_posterior`` is
-        ``"autoregressive_coupling_flow"``, or to
-        :class:`ItemPosteriorChoiceSpace` over the listed families when it
-        is a list of two or more.
+        Per-item flow search space, matching ``flow``. Defaults to
+        :class:`AutoregressiveCouplingFlowSpace` for ``"coupling_flow"``,
+        :class:`AutoregressiveFlowMatchingSpace` for ``"flow_matching"``, or
+        :class:`FlowChoiceSpace` over the listed flows when ``flow`` is a
+        list of two or more.
     summary_api : str
         Summary search-space selector, resolved through
         ``bayesflow_hpo``'s shared search-space registry (this module
@@ -2346,8 +2359,7 @@ def make_irt_hooks(
         Datasets per ``sample`` call during validation, through
         :func:`bayesflow_irt.evaluation.sample_posterior`, the driver the
         model card uses. Each chunk goes to the item posterior as one batch
-        of rows (``batch_flow_rows=True``), so the GPU sees a few large
-        calls instead of one call per 256 rows. ``"auto"`` (default) sizes
+        of rows, so the GPU sees a few large calls per item. ``"auto"`` (default) sizes
         chunks from free device memory with a two-probe measurement; an
         out-of-memory chunk shrinks and is retried.
     run_pipeline_check : bool
@@ -2359,18 +2371,15 @@ def make_irt_hooks(
         the dry run performs a real training step and posterior sample,
         which is unnecessary overhead when hooks are already known-good
         (e.g. in a test suite calling ``make_irt_hooks`` repeatedly).
-    item_posterior : str or sequence of str
-        Item-posterior factorization of the built approximators (see
-        :class:`~bayesflow_irt.EquivariantIRTApproximator`). With
-        ``"autoregressive_coupling_flow"`` the inference space must be an
-        :class:`AutoregressiveCouplingFlowSpace` (the default then), whose
-        draws-summary dimensions are searched alongside the coupling flow's,
-        and ``flow_sample_kwargs`` must be unset. A list of two or more
-        families searches the factorization as a categorical
-        ``item_posterior`` dimension through an
-        :class:`ItemPosteriorChoiceSpace` over exactly those families (the
-        default then; a one-element list pins its family like the string);
-        ``flow_sample_kwargs`` then applies to the flow-matching trials only.
+    flow : str or sequence of str
+        Per-item flow of the built approximators (see
+        :class:`~bayesflow_irt.EquivariantIRTApproximator`):
+        ``"coupling_flow"`` (default) or ``"flow_matching"``. A list of two
+        or more searches the flow as a categorical ``flow`` dimension through
+        a :class:`FlowChoiceSpace` over exactly those flows (a one-element
+        list pins its flow like the string). ``flow_sample_kwargs`` applies
+        to flow-matching trials only and must be unset for
+        ``"coupling_flow"``, which has no integrator.
 
     Returns
     -------
@@ -2580,56 +2589,33 @@ def make_irt_hooks(
                 f"compute. Available: {sorted(known)}."
             )
 
-    families = normalize_item_posterior(item_posterior)
-    searched = len(families) > 1
-    item_posterior = None if searched else families[0]
-    autoregressive = item_posterior == "autoregressive_coupling_flow"
+    flows = normalize_flow(flow)
+    searched = len(flows) > 1
     if inference_space is None:
-        if searched:
-            inference_space = ItemPosteriorChoiceSpace(families=families)
-        elif autoregressive:
-            inference_space = AutoregressiveCouplingFlowSpace()
-        else:
-            inference_space = FlowMatchingSpace()
-    if searched:
-        if not isinstance(inference_space, ItemPosteriorChoiceSpace):
-            raise TypeError(
-                f"item_posterior={list(families)!r} needs an "
-                "ItemPosteriorChoiceSpace inference_space, got "
-                f"{type(inference_space).__name__}."
-            )
-        if tuple(inference_space.families) != families:
-            raise ValueError(
-                f"item_posterior={list(families)!r} does not match the "
-                f"inference space's families {list(inference_space.families)!r}."
-            )
-    elif isinstance(inference_space, ItemPosteriorChoiceSpace):
-        raise TypeError(
-            "ItemPosteriorChoiceSpace needs item_posterior to list two or "
-            f"more families, got {item_posterior!r}."
+        inference_space = (
+            FlowChoiceSpace(flows=flows) if searched else _FLOW_SPACES[flows[0]]()
         )
-    elif autoregressive:
-        if not isinstance(inference_space, AutoregressiveCouplingFlowSpace):
-            # The draws-summary dimensions live on this space; any other
-            # space would build the approximator without them.
+    if searched:
+        if not isinstance(inference_space, FlowChoiceSpace):
             raise TypeError(
-                "item_posterior='autoregressive_coupling_flow' needs an "
-                "AutoregressiveCouplingFlowSpace inference_space, got "
-                f"{type(inference_space).__name__}."
+                f"flow={list(flows)!r} needs a FlowChoiceSpace inference_space, "
+                f"got {type(inference_space).__name__}."
             )
-        if flow_sample_kwargs:
+        if tuple(inference_space.flows) != flows:
             raise ValueError(
-                "flow_sample_kwargs sets an ODE integrator, but the "
-                "autoregressive item posterior samples with a coupling flow, "
-                "which takes none."
+                f"flow={list(flows)!r} does not match the inference space's "
+                f"flows {list(inference_space.flows)!r}."
             )
-    elif isinstance(inference_space, AutoregressiveCouplingFlowSpace):
-        # Its draws-summary dimensions would be sampled and recorded with
-        # every trial while `_build_fn` ignores them.
+    elif not isinstance(inference_space, _FLOW_SPACES[flows[0]]):
+        # The draws-summary dimensions live on these spaces; any other space
+        # would build the approximator without them.
         raise TypeError(
-            "AutoregressiveCouplingFlowSpace needs "
-            "item_posterior='autoregressive_coupling_flow', got "
-            f"{item_posterior!r}."
+            f"flow={flows[0]!r} needs an {_FLOW_SPACES[flows[0]].__name__} "
+            f"inference_space, got {type(inference_space).__name__}."
+        )
+    if flow_sample_kwargs and "flow_matching" not in flows:
+        raise ValueError(
+            "flow_sample_kwargs sets an ODE integrator, but a coupling flow takes none."
         )
 
     if summary_space is None:
@@ -2689,20 +2675,13 @@ def make_irt_hooks(
             gradient_checkpointing=memory_config["gradient_checkpointing"],
             person_chunk_size=memory_config["person_chunk_size"],
         )
-        trial_posterior = hparams["item_posterior"] if searched else item_posterior
-        item_kwargs: dict[str, Any] = {}
-        if trial_posterior == "autoregressive_coupling_flow":
-            item_kwargs = {
-                "item_posterior": trial_posterior,
-                **AutoregressiveCouplingFlowSpace.draws_summary_kwargs(hparams),
-            }
         return EquivariantIRTApproximator(
             adapter=adapter,
             inference_network=flow,
             summary_network=summary_net,
             flow_chunk_size=memory_config["flow_chunk_size"],
             flow_chunk_backward=memory_config["flow_chunk_backward"],
-            **item_kwargs,
+            **_DrawsSummaryDims.draws_summary_kwargs(hparams),
         )
 
     def _train_fn(
@@ -2814,12 +2793,11 @@ def make_irt_hooks(
         for cond_id, corner_batch in enumerate(validation_data.simulations):
             # Passed only when non-empty so the default path calls `sample`
             # with its default arguments.
-            # Under the item-posterior search, only flow-matching trials take
-            # the ODE override; a coupling flow has no integrator.
+            # Under the flow search, only flow-matching trials take the ODE
+            # override; a coupling flow has no integrator.
             sample_kwargs: dict[str, Any] = {}
-            if flow_sample_kwargs and (
-                getattr(approximator, "item_posterior", None)
-                != "autoregressive_coupling_flow"
+            if flow_sample_kwargs and isinstance(
+                approximator.inference_network, bf.networks.FlowMatching
             ):
                 sample_kwargs["flow_sample_kwargs"] = flow_sample_kwargs
             # The memory probe runs once per corner and model: later
@@ -2832,7 +2810,6 @@ def make_irt_hooks(
                 n_posterior_samples,
                 param_keys,
                 chunk_size=sizes.get(cond_id, validation_chunk_size),
-                batch_flow_rows=True,
                 sample_kwargs=sample_kwargs,
             )
             sizes[cond_id] = result.final_chunk_size
@@ -3254,16 +3231,16 @@ def make_irt_hooks(
         # _validate_fn's docstring) — so the conditions= incompatibility
         # documented on make_irt_validation_dataset never comes into play
         # here.
-        # A searched study would otherwise dry-run flow matching only (the mock
-        # trial takes the first choice), so each family is checked in turn.
-        if isinstance(inference_space, ItemPosteriorChoiceSpace):
+        # A searched study would otherwise dry-run the first flow only (the
+        # mock trial takes the first choice), so each flow is checked in turn.
+        if isinstance(inference_space, FlowChoiceSpace):
             _check_spaces = [
                 CompositeSearchSpace(
-                    inference_space=replace(inference_space, families=(fam,)),
+                    inference_space=replace(inference_space, flows=(name,)),
                     summary_space=summary_space,
                     training_space=training_space,
                 )
-                for fam in inference_space.families
+                for name in inference_space.flows
             ]
         else:
             _check_spaces = [search_space]

@@ -17,7 +17,6 @@ from .adapters import (
     make_pcm_adapter,
 )
 from .approximators import EquivariantIRTApproximator
-from .calibration import CalibratedIRTApproximator
 from .card import (
     Cell,
     CellFailedError,
@@ -45,8 +44,9 @@ from .hpo import (
     DEFAULT_REFERENCE_JITTER,
     DEFAULT_TRIAL_MEMORY_CONFIG,
     AutoregressiveCouplingFlowSpace,
+    AutoregressiveFlowMatchingSpace,
+    FlowChoiceSpace,
     IRTHooks,
-    ItemPosteriorChoiceSpace,
     MatrixIRTSummarySpace,
     SimsPerCorner,
     make_classical_reference_provider,
@@ -54,7 +54,7 @@ from .hpo import (
     make_irt_validation_dataset,
     make_tarp_item_metric,
     make_tcc_bias_metric,
-    normalize_item_posterior,
+    normalize_flow,
 )
 from .metadata import MetadataTracker, session_info, training_device
 from .networks import MatrixEquivariantIRTSummary
@@ -95,7 +95,6 @@ from .simulators import (
 from .utils import (
     ChunkSearchOptions,
     FitResult,
-    InferenceProfile,
     MemoryProbeReport,
     PrecomputedDataset,
     ProbeResult,
@@ -105,7 +104,6 @@ from .utils import (
     fit_with_oom_retry,
     is_oom_error,
     probe_memory_config,
-    profile_posterior_inference,
     safe_empty_cache,
     set_summary_memory_config,
 )
@@ -114,7 +112,6 @@ __all__ = [
     "MatrixEquivariantIRTSummary",
     "EquivariantIRTApproximator",
     "DrawsSummary",
-    "CalibratedIRTApproximator",
     "load_weights_compat",
     "weights_digest",
     "SIZE_MOMENTS_CHANGED_AT",
@@ -185,16 +182,15 @@ __all__ = [
     "ProbeResult",
     "MemoryProbeReport",
     "FitResult",
-    "InferenceProfile",
     "TrainingMemoryConfig",
     "configure_large_scale_training",
-    "profile_posterior_inference",
     "DEFAULT_OBJECTIVE_METRICS",
     "AutoregressiveCouplingFlowSpace",
+    "AutoregressiveFlowMatchingSpace",
+    "FlowChoiceSpace",
     "DEFAULT_REFERENCE_JITTER",
     "DEFAULT_TRIAL_MEMORY_CONFIG",
     "IRTHooks",
-    "ItemPosteriorChoiceSpace",
     "MatrixIRTSummarySpace",
     "SimsPerCorner",
     "make_classical_reference_provider",
@@ -202,5 +198,5 @@ __all__ = [
     "make_tcc_bias_metric",
     "make_irt_hooks",
     "make_irt_validation_dataset",
-    "normalize_item_posterior",
+    "normalize_flow",
 ]

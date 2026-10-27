@@ -3,8 +3,8 @@
 ``EquivariantIRTApproximator`` works with summary networks which output
 ``(batch, num_items, embed_dim)`` — one embedding per item. The approximator
 merges ``batch × num_items`` before feeding the flow so that a **shared**
-``FlowMatching`` network can operate on individual ``(a_i, b_i)`` pairs
-conditioned on per-item embeddings.
+flow can operate on individual ``(a_i, b_i)`` pairs conditioned on
+per-item embeddings.
 """
 
 from __future__ import annotations
@@ -17,16 +17,15 @@ import keras.ops as ops
 import numpy as np
 from bayesflow.adapters import Adapter
 from bayesflow.approximators.continuous_approximator import ContinuousApproximator
-from bayesflow.networks import CouplingFlow, InferenceNetwork
-
-try:
-    from bayesflow.networks.standardization import Standardization
-except ModuleNotFoundError:
-    from bayesflow.networks.helpers import Standardization
+from bayesflow.networks import InferenceNetwork
 
 from .draws_summary import DrawsSummary
 
-ITEM_POSTERIORS = ("flow_matching", "autoregressive_coupling_flow")
+# Default (dataset, draw) rows per autoregressive flow call. A coupling-flow
+# call costs about the same from 1 to ~65k rows (Python dispatch dominates),
+# so fewer, larger calls are much faster; the cap keeps a call's activations
+# near 100 MiB for the default CouplingFlow.
+AR_ROW_CHUNK_SIZE = 16384
 
 logger = logging.getLogger(__name__)
 
@@ -107,24 +106,19 @@ class EquivariantIRTApproximator(ContinuousApproximator):
     The summary network must produce ``(batch, num_items, embed_dim)``
     per-item embeddings. This approximator merges the ``batch × num_items``
     dimensions so the inference network sees
-    ``(batch*num_items, param_dim)`` targets with
-    ``(batch*num_items, embed_dim)`` conditions.
+    ``(batch*num_items, param_dim)`` targets, each conditioned on its item's
+    embedding and on a summary of the earlier items (see *Notes*).
 
     Parameters
     ----------
     adapter : bayesflow.adapters.Adapter
         Adapter for data processing.
     inference_network : InferenceNetwork
-        A ``FlowMatching`` network operating on per-item parameters.
+        Flow over one item's parameters, conditioned on that item's
+        conditions: a ``CouplingFlow`` or a ``FlowMatching`` network (see
+        *Notes*).
     summary_network : keras.Layer
         Per-item summary network with output shape ``(batch, num_items, D)``.
-    standardize_params : bool
-        If ``True``, apply online standardization to the flattened
-        ``(batch*items, param_dim)`` inference variables before the
-        flow.  Default ``False`` — prefer passing prior specs to the
-        adapter factories instead, which gives deterministic static
-        standardization with no warm-up.  Enable this as a fallback
-        when the adapter does not standardize.
     flow_chunk_size : int or None
         Optional chunk size for computing inference-network loss over the
         flattened ``batch*num_items`` axis. ``None`` disables chunking.
@@ -134,37 +128,9 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         checkpointing for chunked training passes on the torch backend.
     gradient_accumulation_steps : int
         Number of micro-steps to accumulate before one optimizer update.
-        Must be positive. ``standardize_params=True`` is incompatible with
-        values greater than 1 because running-stat updates would be applied
-        multiple times per logical optimizer step.
-    item_posterior : {"flow_matching", "autoregressive_coupling_flow"}
-        Factorization of the item posterior.
-
-        * ``"flow_matching"`` (default): items are conditionally independent
-          given their embeddings, ``prod_i q(item_i | h_i)``; one shared flow
-          (typically ``FlowMatching``) over each item's parameters.
-        * ``"autoregressive_coupling_flow"``: the autoregressive item factor
-          ``prod_i q(item_i | item_<i, Y)`` of Habermann et al. (2026,
-          Sec. 2.5, Eq. 3). The flow for item ``i`` is conditioned on
-          ``[h_i, s_i, log(i + 1)]`` plus the global
-          ``inference_conditions``, where ``s_i`` is the *draws summary*: a
-          set summary of the earlier draws paired with their embeddings,
-          ``(x_j, h_j), j < i``. This pairing simplifies the extended
-          observations of Sec. 2.6 (which pair parameters with raw
-          observations before the encoding), so the response representation
-          does not depend on earlier draws; the log count is appended as in
-          Sec. 2.6. The log item and person counts the paper also asks for
-          arrive through the adapter's ``n_items``/``n_persons`` conditions,
-          so the adapter must emit them (all built-in adapters do). Training
-          is teacher-forced; sampling loops over items. Pass a
-          ``CouplingFlow`` as ``inference_network``: sampling calls the flow
-          once per item, and a coupling flow inverts in one pass where flow
-          matching integrates an ODE. Draws are joint across items, so
-          functionals of several items (test characteristic curves, sum
-          scores) get the right spread.
+        Must be positive.
     draws_summary_pooling : {"mean", "mean_std", "mean_max", "attention", "pma"}
-        How the draws summary pools the earlier draws
-        (``autoregressive_coupling_flow`` only): the DeepSet mean of
+        How the draws summary pools the earlier draws: the DeepSet mean of
         Habermann et al. (2026), the mean plus a second aggregator (Corso et
         al., 2020), attention with the current item's embedding as query, or
         pooling by multihead attention with one learned seed (both Lee et
@@ -174,6 +140,29 @@ class EquivariantIRTApproximator(ContinuousApproximator):
     draws_summary_num_heads : int
         Attention heads for ``"attention"`` and ``"pma"``; must divide
         ``draws_summary_hidden_dim``.
+
+    Notes
+    -----
+    The item posterior is the autoregressive item factor
+    ``prod_i q(item_i | item_<i, Y)`` of Habermann et al. (2026, Sec. 2.5,
+    Eq. 3). The flow for item ``i`` is conditioned on ``[h_i, s_i, log(i + 1)]``
+    plus the global ``inference_conditions``, where ``s_i`` is the *draws
+    summary*: a set summary of the earlier draws paired with their
+    embeddings, ``(x_j, h_j), j < i``. This pairing simplifies the extended
+    observations of Sec. 2.6 (which pair parameters with raw observations
+    before the encoding), so the response representation does not depend on
+    earlier draws; the log count is appended as in Sec. 2.6. The log item and
+    person counts the paper also asks for arrive through the adapter's
+    ``n_items``/``n_persons`` conditions, so the adapter must emit them (all
+    built-in adapters do).
+
+    Training is teacher-forced, so all items train in one pass; sampling
+    loops over items. Draws are joint across items, so functionals of
+    several items (test characteristic curves, sum scores) get the right
+    spread. Sampling calls the flow once per item: a ``CouplingFlow``
+    inverts in one pass, while ``FlowMatching`` integrates an ODE per item,
+    so it samples more slowly (pass its solver settings as
+    ``flow_sample_kwargs``).
 
     References
     ----------
@@ -188,42 +177,20 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         adapter: Adapter,
         inference_network: InferenceNetwork,
         summary_network: keras.Layer,
-        standardize_params: bool = False,
         flow_chunk_size: int | None = None,
         flow_chunk_backward: str | None = None,
         gradient_accumulation_steps: int = 1,
-        item_posterior: str = "flow_matching",
         draws_summary_pooling: str = "mean",
         draws_summary_hidden_dim: int = 32,
         draws_summary_dim: int = 32,
         draws_summary_num_heads: int = 4,
         **kwargs,
     ):
-        if item_posterior not in ITEM_POSTERIORS:
-            raise ValueError(
-                f"item_posterior must be one of {ITEM_POSTERIORS}, "
-                f"got {item_posterior!r}."
-            )
-        if item_posterior == "autoregressive_coupling_flow" and not isinstance(
-            inference_network, CouplingFlow
-        ):
-            raise TypeError(
-                "item_posterior='autoregressive_coupling_flow' requires a "
-                "CouplingFlow inference_network, got "
-                f"{type(inference_network).__name__}."
-            )
-        if item_posterior != "flow_matching" and standardize_params:
-            raise ValueError(
-                "standardize_params=True requires item_posterior='flow_matching'; "
-                "standardize item parameters in the adapter instead."
-            )
         # Disable the parent's standardization (it can't handle 3-D shapes);
-        # we optionally do our own in the flattened 2-D space inside compute_metrics.
-        # Backward/forward compatibility:
+        # item parameters are standardized in the adapter instead.
         # Serialized models may carry a `standardize` key from the base class
-        # config. We always control standardization here (via
-        # `standardize_params` + flattened standardizer), so drop that key to
-        # avoid passing duplicate keyword arguments to ContinuousApproximator.
+        # config; drop it to avoid passing duplicate keyword arguments to
+        # ContinuousApproximator.
         kwargs.pop("standardize", None)
         super().__init__(
             adapter=adapter,
@@ -244,50 +211,30 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             )
         if int(gradient_accumulation_steps) <= 0:
             raise ValueError("gradient_accumulation_steps must be a positive integer.")
-        if standardize_params and int(gradient_accumulation_steps) > 1:
-            raise ValueError(
-                "standardize_params=True cannot be combined with "
-                "gradient_accumulation_steps > 1 due to running-stat updates."
-            )
-        self.standardize_params = standardize_params
         self.flow_chunk_size = (
             int(flow_chunk_size) if flow_chunk_size is not None else None
         )
         self.flow_chunk_backward = flow_chunk_backward
         self.gradient_accumulation_steps = int(gradient_accumulation_steps)
-        if standardize_params:
-            self._flat_standardize = Standardization(trainable=False)
         self._global_condition_dim = 0
         self._accum_step = 0
-        self.item_posterior = item_posterior
         self.draws_summary_pooling = draws_summary_pooling
         self.draws_summary_hidden_dim = int(draws_summary_hidden_dim)
         self.draws_summary_dim = int(draws_summary_dim)
         self.draws_summary_num_heads = int(draws_summary_num_heads)
-        self.draws_summary = (
-            DrawsSummary(
-                self.draws_summary_hidden_dim,
-                self.draws_summary_dim,
-                pooling=self.draws_summary_pooling,
-                num_heads=self.draws_summary_num_heads,
-            )
-            if self.autoregressive
-            else None
+        self.draws_summary = DrawsSummary(
+            self.draws_summary_hidden_dim,
+            self.draws_summary_dim,
+            pooling=self.draws_summary_pooling,
+            num_heads=self.draws_summary_num_heads,
         )
-
-    @property
-    def autoregressive(self) -> bool:
-        return self.item_posterior == "autoregressive_coupling_flow"
 
     def _item_conditions(self, summary_outputs, items):
         """Per-item conditions ``(B, I, ·)`` before global conditions.
 
-        For ``flow_matching`` these are the embeddings ``h``; for the
-        autoregressive factor ``[h, s]`` with teacher-forced draws summaries
-        ``s`` of the true ``items``.
+        The embeddings ``h`` and the teacher-forced draws summaries ``s`` of
+        the true ``items``, ``[h, s]``.
         """
-        if not self.autoregressive:
-            return summary_outputs
         s = self.draws_summary(items, summary_outputs)
         return ops.concatenate([summary_outputs, s], axis=-1)
 
@@ -479,10 +426,6 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         iv_shape = data_shapes["inference_variables"]  # (batch, I, param_dim)
         param_dim = iv_shape[-1]
 
-        # Build flat standardization layer for (*, param_dim) data
-        if self.standardize_params and not self._flat_standardize.built:
-            self._flat_standardize.build((2, param_dim))
-
         # Compute summary output embed_dim by doing a dummy forward
         summary_out_shape = self.summary_network.compute_output_shape(
             data_shapes["summary_variables"]
@@ -490,13 +433,9 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         embed_dim = summary_out_shape[-1]
 
         # Combine with any inference_conditions
-        cond_dim = embed_dim
-        if self.autoregressive:
-            if not self.draws_summary.built:
-                self.draws_summary.build(
-                    (None, None, param_dim), (None, None, embed_dim)
-                )
-            cond_dim += self.draws_summary.output_dim
+        if not self.draws_summary.built:
+            self.draws_summary.build((None, None, param_dim), (None, None, embed_dim))
+        cond_dim = embed_dim + self.draws_summary.output_dim
         if "inference_conditions" in data_shapes:
             cond_dim += data_shapes["inference_conditions"][-1]
             self._global_condition_dim = int(data_shapes["inference_conditions"][-1])
@@ -607,10 +546,6 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             batch_size,
             num_items,
         )
-
-        # Online standardization in the flattened 2-D space
-        if self.standardize_params:
-            flat_params = self._flat_standardize(flat_params, stage=stage)
 
         if sample_weight is not None:
             # Per-dataset weights (batch,) or per-item weights (batch, items)
@@ -785,11 +720,10 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         summary_variables=None,
         **kwargs,
     ):
-        """Sample from the per-item posterior.
+        """Sample from the item posterior, one item at a time.
 
-        Chunks over both the condition axis (``batch * num_items``) and
-        the sample axis to keep peak GPU memory bounded.  Chunk sizes
-        are configurable via ``kwargs``:
+        Chunks over the ``(dataset, draw)`` rows to keep peak GPU memory
+        bounded:
 
         Parameters
         ----------
@@ -801,14 +735,11 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             placeholders are injected automatically.
         summary_variables : Tensor
             Response matrix ``(batch, P, I)`` or ``(batch, P, I, K)``.
-        sample_chunk_size : int
-            Max posterior draws per inner loop iteration (default 64).
-            Unused for ``autoregressive_coupling_flow``.
         condition_chunk_size : int
-            Max item-conditions per outer loop iteration (default 256).
-            For ``autoregressive_coupling_flow`` it counts ``(dataset, draw)``
-            rows instead, each of which makes ``num_items`` sequential flow
-            calls.
+            Max ``(dataset, draw)`` rows per chunk (default
+            ``AR_ROW_CHUNK_SIZE`` = 16384); each chunk makes ``num_items``
+            sequential flow calls, so larger chunks are faster until GPU
+            memory runs out.
         flow_sample_kwargs : dict
             Extra keyword arguments forwarded to
             ``inference_network.sample(...)``. Use this for FlowMatching
@@ -839,8 +770,6 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         # summary_outputs: (batch, num_items, embed_dim)
 
         batch_size = self._static_dim(summary_outputs, 0, "summary_outputs")
-        num_items = self._static_dim(summary_outputs, 1, "summary_outputs")
-        flat_n = batch_size * num_items
 
         # Some sampling paths can provide only summary variables. If the flow
         # was built with global conditions, inject zero-valued placeholders to
@@ -851,81 +780,24 @@ class EquivariantIRTApproximator(ContinuousApproximator):
                 dtype=keras.ops.dtype(summary_outputs),
             )
 
-        flat_conditions = self._flatten_conditions(
-            summary_outputs,
-            inference_conditions,
-            batch_size,
-            num_items,
+        condition_chunk_size = int(
+            kwargs.pop("condition_chunk_size", AR_ROW_CHUNK_SIZE)
         )
-
-        # Sampling all trajectories at once can be memory-intensive for large
-        # validation batches. Chunk over both item-conditions and sample axis
-        # to keep peak memory bounded while preserving output semantics.
-        sample_chunk_size = int(kwargs.pop("sample_chunk_size", 64))
-        condition_chunk_size = int(kwargs.pop("condition_chunk_size", 256))
         flow_sample_kwargs = kwargs.pop("flow_sample_kwargs", None)
         if flow_sample_kwargs is None:
             flow_sample_kwargs = {}
         elif not isinstance(flow_sample_kwargs, dict):
             raise TypeError("flow_sample_kwargs must be a dict or None.")
-        if sample_chunk_size <= 0:
-            raise ValueError("sample_chunk_size must be a positive integer.")
         if condition_chunk_size <= 0:
             raise ValueError("condition_chunk_size must be a positive integer.")
 
-        if self.autoregressive:
-            return self._sample_autoregressive(
-                num_samples,
-                summary_outputs,
-                inference_conditions,
-                row_chunk_size=condition_chunk_size,
-                flow_sample_kwargs=flow_sample_kwargs,
-            )
-
-        condition_chunks = []
-        for cond_start in range(0, flat_n, condition_chunk_size):
-            n_cond = min(condition_chunk_size, flat_n - cond_start)
-            flat_conditions_cond = flat_conditions[cond_start : cond_start + n_cond]
-
-            sample_chunks = []
-            for sample_start in range(0, num_samples, sample_chunk_size):
-                n_sample = min(sample_chunk_size, num_samples - sample_start)
-
-                flat_conditions_chunk = ops.expand_dims(flat_conditions_cond, axis=1)
-                cond_dim = self._static_dim(flat_conditions_cond, -1, "flat_conditions")
-                flat_conditions_chunk = ops.broadcast_to(
-                    flat_conditions_chunk,
-                    (n_cond, n_sample, cond_dim),
-                )
-                chunk = self.inference_network.sample(
-                    (n_cond, n_sample),
-                    conditions=flat_conditions_chunk,
-                    **flow_sample_kwargs,
-                )
-                sample_chunks.append(chunk)
-
-            condition_chunks.append(ops.concatenate(sample_chunks, axis=1))
-
-        samples = ops.concatenate(condition_chunks, axis=0)
-        param_dim = self._static_dim(samples, -1, "samples")
-
-        # Inverse standardization: map from N(0,1) space back to original scale
-        if self.standardize_params:
-            flat_samples = ops.reshape(samples, (-1, param_dim))
-            flat_samples = self._flat_standardize(
-                flat_samples, stage="inference", forward=False
-            )
-            samples = ops.reshape(flat_samples, (flat_n, num_samples, param_dim))
-
-        # Reshape: (batch, num_items, num_samples, param_dim)
-        samples = ops.reshape(samples, (batch_size, num_items, num_samples, param_dim))
-
-        # Transpose to (batch, num_samples, num_items, param_dim)
-        samples = ops.transpose(samples, axes=(0, 2, 1, 3))
-
-        # Keep 4-D shape so the adapter inverse correctly splits the last
-        # axis (param_dim=2) back into the original per-item variables.
-        return samples
+        return self._sample_autoregressive(
+            num_samples,
+            summary_outputs,
+            inference_conditions,
+            row_chunk_size=condition_chunk_size,
+            flow_sample_kwargs=flow_sample_kwargs,
+        )
 
     def _sample_autoregressive(
         self,
@@ -1028,7 +900,7 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         If the adapter uses the loading parameterization, the derived key
         ``d = -a*b`` is added to the output.
 
-        Extra ``**kwargs`` (e.g., ``sample_chunk_size``,
+        Extra ``**kwargs`` (e.g., ``summary_batch_size``,
         ``condition_chunk_size``, ``flow_sample_kwargs``) are forwarded to
         ``_sample()``.
         """
@@ -1121,11 +993,12 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         base = super().get_config()
         base.update(
             {
-                "standardize_params": self.standardize_params,
                 "flow_chunk_size": self.flow_chunk_size,
                 "flow_chunk_backward": self.flow_chunk_backward,
                 "gradient_accumulation_steps": self.gradient_accumulation_steps,
-                "item_posterior": self.item_posterior,
+                # Marks the item posterior for from_config; the independent
+                # one ("flow_matching") is gone.
+                "item_posterior": "autoregressive_coupling_flow",
                 "draws_summary_pooling": self.draws_summary_pooling,
                 "draws_summary_hidden_dim": self.draws_summary_hidden_dim,
                 "draws_summary_dim": self.draws_summary_dim,
@@ -1137,6 +1010,16 @@ class EquivariantIRTApproximator(ContinuousApproximator):
     @classmethod
     def from_config(cls, config, custom_objects=None):
         config = dict(config)
+        # Models saved with the independent item posterior (no
+        # ``item_posterior`` key, or "flow_matching") cannot be rebuilt.
+        item_posterior = config.pop("item_posterior", None)
+        if item_posterior != "autoregressive_coupling_flow":
+            raise ValueError(
+                "This model was saved with the independent item posterior "
+                f"(item_posterior={item_posterior!r}), which was removed after "
+                "bayesflow-irt 0.2. Load it with bayesflow-irt 0.2."
+            )
+        config.pop("standardize_params", None)
         from .adapters import (
             LogTransform,
             OneHotEncode,

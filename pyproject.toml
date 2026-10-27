@@ -36,7 +36,6 @@ Issues = "https://github.com/matthiaskloft/bayesflow-irt/issues"
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy", "matplotlib", "seaborn"]
 examples = ["matplotlib", "seaborn", "tqdm", "ipywidgets", "ipykernel"]
-calibration = ["bayesflow-calibration-loss>=0.2.0"]
 # 0.5.2+: provides `AggregationConfigError`, the metric-kind registry and the
 # checkpoint pool's `extra_metadata`.
 hpo = ["bayesflow-hpo>=0.5.2"]
