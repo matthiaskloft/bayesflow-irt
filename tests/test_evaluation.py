@@ -1,5 +1,8 @@
 """Tests for the shared posterior sampling driver (``evaluation.sample_posterior``)."""
 
+import gc
+import weakref
+
 import keras
 import numpy as np
 import pytest
@@ -72,6 +75,38 @@ def test_out_of_memory_shrinks_and_keeps_the_draws():
     np.testing.assert_array_equal(res.draws["b"], ref.draws["b"])
     with pytest.raises(SamplingFailedError, match="Out of memory"):
         sample_posterior(RowwiseApproximator(max_chunk=0), data, 5, ["b"], chunk_size=2)
+
+
+def test_out_of_memory_retry_frees_the_failed_attempt():
+    class Buffer:
+        pass
+
+    class Leaky(RowwiseApproximator):
+        """Holds a buffer in the raising frame, as a tensor would be."""
+
+        def __init__(self):
+            super().__init__(max_chunk=4)
+            self.buffers = []
+
+        def sample(self, conditions, num_samples, **kwargs):
+            # Every earlier attempt failed, so its buffer must be gone.
+            assert all(ref() is None for ref in self.buffers)
+            buffer = Buffer()
+            self.buffers.append(weakref.ref(buffer))
+            try:
+                return super().sample(conditions, num_samples, **kwargs)
+            except torch.cuda.OutOfMemoryError as exc:
+                # The frame keeps its own error: a reference cycle, which
+                # reference counting alone never frees.
+                error = exc
+                raise error
+
+    gc.disable()  # Only an explicit collection may free the cycle.
+    try:
+        res = sample_posterior(Leaky(), _data(), 5, ["b"], chunk_size=10)
+    finally:
+        gc.enable()
+    assert res.retries
 
 
 def test_autoregressive_row_batch_shrinks_for_one_dataset():

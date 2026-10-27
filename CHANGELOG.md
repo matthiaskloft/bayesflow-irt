@@ -42,6 +42,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   built-in adapters do), `profile_posterior_inference`, `InferenceProfile`,
   and the `sample_chunk_size` argument of `EquivariantIRTApproximator.sample`.
 
+### Fixed
+
+- `sample_posterior` frees a failed attempt's device memory before it retries
+  after running out of memory: it strips the error's tracebacks and runs the
+  cycle collector. Before, the retries could shrink to one dataset and still
+  fail (#21).
+
 ## [0.2.0] - 2026-10-24
 
 ### Added

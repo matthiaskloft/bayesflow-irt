@@ -11,6 +11,7 @@ runs on them unchanged.
 
 from __future__ import annotations
 
+import gc
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -99,6 +100,24 @@ def _torch_cuda() -> bool:
     return torch.cuda.is_available()
 
 
+def _drop_tracebacks(exc: BaseException) -> BaseException:
+    """Strip the tracebacks of ``exc`` and the exceptions chained to it.
+
+    Their frames hold a failed attempt's device tensors for as long as the
+    exception lives.
+    """
+    seen: set[int] = set()
+    stack: list[BaseException | None] = [exc]
+    while stack:
+        link = stack.pop()
+        if link is None or id(link) in seen:
+            continue
+        seen.add(id(link))
+        link.__traceback__ = None
+        stack += [link.__cause__, link.__context__]
+    return exc
+
+
 def _auto_chunk_size(
     probe: Any, n: int, share: float = MEMORY_SHARE
 ) -> tuple[int, dict[str, Any]]:
@@ -136,6 +155,7 @@ def _auto_chunk_size(
                 raise
             oom = True
         if oom:
+            gc.collect()
             safe_empty_cache()
             # The larger probe failed: the smaller one fit.
             size = sizes[0] if peaks else 1
@@ -319,12 +339,14 @@ def sample_posterior(
         except Exception as exc:
             if not is_oom_error(exc):
                 raise
-            oom = exc
+            oom = _drop_tracebacks(exc)
         if oom is None:
             start = stop
             continue
         # Shrink outside the except block: the live traceback would otherwise
-        # keep the failed attempt's device tensors allocated.
+        # keep the failed attempt's device tensors allocated. Frames left in
+        # reference cycles are freed only by the cycle collector.
+        gc.collect()
         safe_empty_cache()
         record: dict[str, Any] = {"start": start, "size": stop - start}
         if stop - start < 2:
