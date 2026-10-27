@@ -109,6 +109,34 @@ def test_out_of_memory_retry_frees_the_failed_attempt():
     assert res.retries
 
 
+def test_each_chunk_frees_its_reference_cycles():
+    class Cycle:
+        pass
+
+    class Littering(RowwiseApproximator):
+        """Leaves a reference cycle behind per call, as a tensor graph can."""
+
+        def __init__(self):
+            super().__init__()
+            self.cycles = []
+
+        def sample(self, conditions, num_samples, **kwargs):
+            # Every earlier chunk finished, so its cycle must be gone.
+            assert all(ref() is None for ref in self.cycles)
+            cycle = Cycle()
+            cycle.self = cycle
+            self.cycles.append(weakref.ref(cycle))
+            return super().sample(conditions, num_samples, **kwargs)
+
+    fake = Littering()
+    gc.disable()  # Only an explicit collection may free the cycles.
+    try:
+        sample_posterior(fake, _data(), 5, ["b"], chunk_size=3)
+    finally:
+        gc.enable()
+    assert len(fake.cycles) == 4
+
+
 def test_autoregressive_row_batch_shrinks_for_one_dataset():
     data = _data()
     ref = sample_posterior(RowwiseApproximator(), data, 8, ["b"], chunk_size=10)
