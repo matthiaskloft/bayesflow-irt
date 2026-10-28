@@ -213,10 +213,25 @@ def _fake_cuda(monkeypatch, free_bytes, peak_bytes):
     from bayesflow_irt import approximators as module
 
     starts = []
-    monkeypatch.setattr(module, "_torch_cuda", lambda: True)
-    monkeypatch.setattr(module, "_device_peak_start", lambda: starts.append(1) or 0)
-    monkeypatch.setattr(module, "_device_peak_since", lambda base: peak_bytes)
-    monkeypatch.setattr(module, "_device_free_bytes", lambda: free_bytes)
+    device = object()
+    monkeypatch.setattr(module, "_cuda_device", lambda tensor: device)
+
+    def peak_start(d):
+        assert d is device
+        starts.append(1)
+        return 0
+
+    def peak_since(d, base):
+        assert d is device
+        return peak_bytes
+
+    def free(d):
+        assert d is device
+        return free_bytes
+
+    monkeypatch.setattr(module, "_device_peak_start", peak_start)
+    monkeypatch.setattr(module, "_device_peak_since", peak_since)
+    monkeypatch.setattr(module, "_device_free_bytes", free)
     return starts
 
 
@@ -232,6 +247,25 @@ def test_row_chunk_without_cuda_is_fixed(built, monkeypatch):
     monkeypatch.setattr(module, "AR_ROW_CHUNK_SIZE", 256)
     assert spy.draw() == [256] * 10 + [256] * 10 + [88] * 10
     assert spy.approximator._ar_row_bytes is None
+
+
+def test_auto_rows_use_the_device_of_the_draws(monkeypatch):
+    """With CUDA available but the draws on the CPU, ``"auto"`` must not size
+    from GPU memory: the GPU's peak would not move, and the measured cost per
+    row would collapse to one byte and lift the row cap. On a GPU it reads
+    that GPU, not the current one."""
+    from types import SimpleNamespace
+
+    from bayesflow_irt import approximators as module
+
+    monkeypatch.setattr(module, "_torch_cuda", lambda: True)
+    cpu = SimpleNamespace(device=SimpleNamespace(type="cpu"))
+    gpu1 = SimpleNamespace(device=SimpleNamespace(type="cuda", index=1))
+    assert module._cuda_device(cpu) is None
+    assert module._cuda_device(np.zeros(1)) is None
+    assert module._cuda_device(gpu1) is gpu1.device
+    monkeypatch.setattr(module, "_torch_cuda", lambda: False)
+    assert module._cuda_device(gpu1) is None
 
 
 def test_auto_rows_are_measured_once_and_reused(built, monkeypatch):
@@ -262,14 +296,17 @@ def test_auto_rows_skip_measuring_small_chunks(built, monkeypatch):
 def test_auto_rows_scale_with_items(built, monkeypatch):
     """More items than measured at cost proportionally more per row; fewer
     keep the stored cost."""
+    from bayesflow_irt import approximators as module
+
     _fake_cuda(monkeypatch, free_bytes=1_000_000, peak_bytes=1)
     approximator = built[1]
     monkeypatch.setattr(approximator, "_ar_row_bytes", 1000.0)
     monkeypatch.setattr(approximator, "_ar_row_items", 10)
-    assert approximator._auto_row_chunk(10, 10**6) == 800
-    assert approximator._auto_row_chunk(20, 10**6) == 400
-    assert approximator._auto_row_chunk(5, 10**6) == 800
-    assert approximator._auto_row_chunk(10, 300) == 300
+    device = module._cuda_device(None)
+    assert approximator._auto_row_chunk(10, 10**6, device) == 800
+    assert approximator._auto_row_chunk(20, 10**6, device) == 400
+    assert approximator._auto_row_chunk(5, 10**6, device) == 800
+    assert approximator._auto_row_chunk(10, 300, device) == 300
 
 
 def test_auto_rows_shrink_on_out_of_memory(built, monkeypatch):
