@@ -333,6 +333,51 @@ Ship these as focused changes with their own evidence. Keep correctness fixes se
 - Offline self-contained cards and their packaged assets.
 - The separate public repository and its own release cycle. No hardcoded sibling checkout paths were located in package source/tests/scripts; the major remaining coupling is semantic and environmental.
 
+## Article evaluation deliverables (2026-10-28)
+
+Follow-up requirements, separate from the 20 October review findings:
+the article focuses exclusively on 2PL, with item calibration and person
+scoring both compared against Stan/NUTS and mirt. The model-card evaluation
+is the simulation-study backbone. Research requirements extend the existing
+stage-5 plan in bayesflow-irt-research/docs/plans/plan-model-card.md, section 8a.
+
+R/Stan fitting, orchestration and estimator-specific converters stay in the
+research repository. The package should provide these reusable pieces:
+
+- [ ] Supported evaluation-input export/reconstruction: responses, truths,
+  dataset IDs, selected item/person indices, cell/protocol specification and
+  simulator provenance. Research runners should not duplicate private seed
+  or selection logic.
+- [ ] Stronger reference pairing contract: dataset identity/hash manifests,
+  replication counts and per-metric subsets, beyond seed/protocol checks.
+  Detect incompatible manifests and expose missing/failed pairs and prior
+  mismatches in the card.
+- [ ] Supplied paired differences and MCSEs in reference records/rendering.
+  card_reference.difference() currently combines marginal MCSEs as independent
+  estimates even for a paired reference. Do not present this approximation
+  as a paired MCSE; distinguish supplied paired uncertainty, independent
+  uncertainty and unavailable uncertainty.
+- [ ] Reusable metric computation for reference outputs covering items,
+  persons and conditional ability summaries, with explicit coordinates,
+  selections and aggregation. Preserve omissions/notes for diagnostics that
+  an estimator does not support.
+- [ ] TCC interval coverage and width alongside existing bias diagnostics,
+  with MCSEs treating datasets as independent units. Verify definitions
+  against scientific sources before implementation.
+- [ ] Per-dataset metric contributions or an export sufficient for paired
+  resampling by the research runner. Keep large raw-draw archives optional.
+- [ ] Reference failure/usable counts and timing summaries with explicit
+  timing boundaries. Show item and person results and complete workflow
+  timing, distinguishing single-dataset latency and batched throughput.
+- [ ] Focused tests for manifest mismatches, paired-difference ingestion,
+  unavailable paired MCSEs, failed-fit subsets, metric parity and rendering.
+  Document the reference/export contract alongside implementation.
+
+Completion: research converters can populate existing cards with traceable
+Stan and mirt item/person comparisons and valid paired uncertainty. Extend
+existing reference loading/display rather than rebuilding it. Article
+tables and figures remain research outputs.
+
 ## Verification note
 
 The review used Python 3.11 with Keras 3.12.1, BayesFlow 2.0.8, and a torch
