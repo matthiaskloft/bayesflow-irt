@@ -173,8 +173,10 @@ def test_sampling_conditions_match_teacher_forcing(built, monkeypatch, row_chunk
 
 
 class _Rows:
-    """Spy on the flow's sample calls of ``built`` (10 items), recording the
-    rows per call; calls above ``oom_above`` rows raise a fake CUDA OOM."""
+    """Stub the flow's sample calls of ``built`` (10 items), recording the
+    rows per call; calls above ``oom_above`` rows raise a fake CUDA OOM. The
+    stub returns zeros: these tests check chunking, and the real flow made
+    them take seconds each. The summary and pooling code still runs."""
 
     def __init__(self, built, monkeypatch, oom_above=None):
         import torch
@@ -182,16 +184,15 @@ class _Rows:
         simulator, self.approximator = built
         self.adapted = _adapted(self.approximator, simulator.sample((2,)))
         flow = self.approximator.inference_network
-        real_sample = flow.sample
         self.rows = []
 
-        def spy(batch_shape, **kwargs):
+        def stub(batch_shape, conditions=None, **kwargs):
             if oom_above is not None and batch_shape[0] > oom_above:
                 raise torch.cuda.OutOfMemoryError("CUDA out of memory (fake)")
             self.rows.append(batch_shape[0])
-            return real_sample(batch_shape, **kwargs)
+            return keras.ops.zeros((*batch_shape, 2), dtype=conditions.dtype)
 
-        monkeypatch.setattr(flow, "sample", spy)
+        monkeypatch.setattr(flow, "sample", stub)
         # the fixture is shared: keep its stored measurement out of other tests
         monkeypatch.setattr(self.approximator, "_ar_row_bytes", None)
 
