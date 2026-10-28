@@ -159,6 +159,10 @@ Maddison, C. J., Tarlow, D., & Minka, T. (2014). *A\* sampling*. In *Advances in
 OpenAlex verification: `https://openalex.org/W2296701362` (no DOI registered; NeurIPS 27 proceedings).
 Used for the Gumbel-max trick and its exponential-noise representation for exact categorical sampling.
 
+Song, Y., Meng, C., Liao, R., & Ermon, S. (2021). Accelerating feedforward computation via parallel nonlinear equation solving. In *Proceedings of the 38th International Conference on Machine Learning* (PMLR 139, pp. 9791-9800). https://proceedings.mlr.press/v139/song21a.html
+OpenAlex verification: `https://openalex.org/W3172084791` (arXiv DOI record `10.48550/arXiv.2002.03629`; only the arXiv version is indexed, the ICML venue and pages are from the PMLR page).
+Checked against the PMLR full text: Sec. 3.2 and Algorithm 1 (nonlinear Jacobi iteration, early stop when the change between iterations is at most a tolerance), Proposition 1 (for any initialization, the result equals feedforward computation after at most T parallel iterations), Algorithms 2 and 3 (block hybrids Jacobi-GS and GS-Jacobi), Sec. 5.3 (ancestral sampling from MADE about 26x faster, PixelCNN++ 2.1-6.5x). Not implemented; backs the parked idea in `dev/parallel_ar_sampling_idea.md` of sampling the autoregressive item posterior in parallel over items.
+
 ## Memory controls
 
 Chen, T., Xu, B., Zhang, C., & Guestrin, C. (2016). *Training deep nets with sublinear memory cost*. arXiv. https://arxiv.org/abs/1604.06174
