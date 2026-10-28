@@ -186,6 +186,8 @@ PyTorch Team. (2026). *CUDA semantics* (memory allocator options, including `PYT
 
 PyTorch Team. (2026). *torch.cuda.memory.set_per_process_memory_fraction* (caps the caching allocator to a fraction of total device memory; raises `torch.cuda.OutOfMemoryError` in the allocator rather than deferring to the platform driver once the cap would be exceeded). https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.set_per_process_memory_fraction.html
 
+PyTorch Team. (2026). *torch.cuda.memory: `mem_get_info`, `max_memory_allocated`, `reset_peak_memory_stats`, `memory_reserved`* (free and total device memory from `cudaMemGetInfo`; peak memory occupied by tensors since the last peak reset; memory held by the caching allocator). Backs `condition_chunk_size="auto"` in `EquivariantIRTApproximator._sample_autoregressive`, which follows the rule of `evaluation._auto_chunk_size`. Read from the docstrings of torch 2.11. https://docs.pytorch.org/docs/stable/cuda.html#memory-management
+
 NumPy Developers. (2026). *Parallel random number generation: sequence of integer seeds*. https://numpy.org/doc/stable/reference/random/parallel.html#sequence-of-integer-seeds
     Backs `compute_tarp_coverage`'s reference-seed salting: a
     `[varying, fixed]` integer sequence carries "about the same"
