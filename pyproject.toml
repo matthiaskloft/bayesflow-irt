@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bayesflow-irt"
-version = "0.3.0"
+version = "0.4.0"
 description = "BayesFlow add-on for Item Response Theory with many-to-many summary networks"
 readme = "README.md"
 license = "MIT"
