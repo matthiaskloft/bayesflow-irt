@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-28
+
 ### Changed
 
 - `condition_chunk_size` for autoregressive sampling defaults to `"auto"`.
