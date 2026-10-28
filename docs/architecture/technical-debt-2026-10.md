@@ -338,8 +338,8 @@ Ship these as focused changes with their own evidence. Keep correctness fixes se
 Follow-up requirements, separate from the 20 October review findings:
 the article focuses exclusively on 2PL, with item calibration and person
 scoring both compared against Stan/NUTS and mirt. The model-card evaluation
-is the simulation-study backbone. Research requirements extend the existing
-stage-5 plan in bayesflow-irt-research/docs/plans/plan-model-card.md, section 8a.
+is the simulation-study backbone. The reference-comparison study plan
+specifies the research deliverables.
 
 R/Stan fitting, orchestration and estimator-specific converters stay in the
 research repository. The package should provide these reusable pieces:
