@@ -172,37 +172,183 @@ def test_sampling_conditions_match_teacher_forcing(built, monkeypatch, row_chunk
     np.testing.assert_allclose(conds, expected, atol=1e-5)
 
 
-def test_default_row_chunk_is_large_and_capped(built, monkeypatch):
-    """By default all (dataset, draw) rows go through one flow call per item,
-    up to ``AR_ROW_CHUNK_SIZE`` rows. A flow call costs about the same for 1
-    or thousands of rows, so the old default of 256 rows made sampling 15-70x
-    slower than one chunk."""
-    from bayesflow_irt import approximators as approximators_module
+class _Rows:
+    """Spy on the flow's sample calls of ``built`` (10 items), recording the
+    rows per call; calls above ``oom_above`` rows raise a fake CUDA OOM."""
 
-    simulator, approximator = built  # 10 items
-    adapted = _adapted(approximator, simulator.sample((2,)))
-    flow = approximator.inference_network
-    real_sample = flow.sample
-    rows = []
+    def __init__(self, built, monkeypatch, oom_above=None):
+        import torch
 
-    def spy(batch_shape, **kwargs):
-        rows.append(batch_shape[0])
-        return real_sample(batch_shape, **kwargs)
+        simulator, self.approximator = built
+        self.adapted = _adapted(self.approximator, simulator.sample((2,)))
+        flow = self.approximator.inference_network
+        real_sample = flow.sample
+        self.rows = []
 
-    monkeypatch.setattr(flow, "sample", spy)
+        def spy(batch_shape, **kwargs):
+            if oom_above is not None and batch_shape[0] > oom_above:
+                raise torch.cuda.OutOfMemoryError("CUDA out of memory (fake)")
+            self.rows.append(batch_shape[0])
+            return real_sample(batch_shape, **kwargs)
 
-    def draw():
-        rows.clear()
-        approximator._sample(
-            300,
-            summary_variables=adapted["summary_variables"],
-            inference_conditions=adapted["inference_conditions"],
+        monkeypatch.setattr(flow, "sample", spy)
+        # the fixture is shared: keep its stored measurement out of other tests
+        monkeypatch.setattr(self.approximator, "_ar_row_bytes", None)
+
+    def draw(self, num_samples=300, **kw):
+        self.rows.clear()
+        out = self.approximator._sample(
+            num_samples,
+            summary_variables=self.adapted["summary_variables"],
+            inference_conditions=self.adapted["inference_conditions"],
+            **kw,
         )
-        return list(rows)
+        assert out.shape == (2, num_samples, 10, 2)
+        return list(self.rows)
 
-    assert draw() == [600] * 10
-    monkeypatch.setattr(approximators_module, "AR_ROW_CHUNK_SIZE", 256)
-    assert draw() == [256] * 10 + [256] * 10 + [88] * 10
+
+def _fake_cuda(monkeypatch, free_bytes, peak_bytes):
+    """Make ``"auto"`` see a CUDA device with these memory readings; return
+    the list that counts peak measurements."""
+    from bayesflow_irt import approximators as module
+
+    starts = []
+    device = object()
+    monkeypatch.setattr(module, "_cuda_device", lambda tensor: device)
+
+    def peak_start(d):
+        assert d is device
+        starts.append(1)
+        return 0
+
+    def peak_since(d, base):
+        assert d is device
+        return peak_bytes
+
+    def free(d):
+        assert d is device
+        return free_bytes
+
+    monkeypatch.setattr(module, "_device_peak_start", peak_start)
+    monkeypatch.setattr(module, "_device_peak_since", peak_since)
+    monkeypatch.setattr(module, "_device_free_bytes", free)
+    return starts
+
+
+def test_row_chunk_without_cuda_is_fixed(built, monkeypatch):
+    """Off CUDA, ``"auto"`` is ``AR_ROW_CHUNK_SIZE`` rows per flow call. A flow
+    call costs about the same for 1 or thousands of rows, so the old default
+    of 256 rows made sampling 15-70x slower than one chunk."""
+    from bayesflow_irt import approximators as module
+
+    monkeypatch.setattr(module, "_torch_cuda", lambda: False)
+    spy = _Rows(built, monkeypatch)
+    assert spy.draw() == [600] * 10
+    monkeypatch.setattr(module, "AR_ROW_CHUNK_SIZE", 256)
+    assert spy.draw() == [256] * 10 + [256] * 10 + [88] * 10
+    assert spy.approximator._ar_row_bytes is None
+
+
+def test_auto_rows_use_the_device_of_the_draws(monkeypatch):
+    """With CUDA available but the draws on the CPU, ``"auto"`` must not size
+    from GPU memory: the GPU's peak would not move, and the measured cost per
+    row would collapse to one byte and lift the row cap. On a GPU it reads
+    that GPU, not the current one."""
+    from types import SimpleNamespace
+
+    from bayesflow_irt import approximators as module
+
+    monkeypatch.setattr(module, "_torch_cuda", lambda: True)
+    cpu = SimpleNamespace(device=SimpleNamespace(type="cpu"))
+    gpu1 = SimpleNamespace(device=SimpleNamespace(type="cuda", index=1))
+    assert module._cuda_device(cpu) is None
+    assert module._cuda_device(np.zeros(1)) is None
+    assert module._cuda_device(gpu1) is gpu1.device
+    monkeypatch.setattr(module, "_torch_cuda", lambda: False)
+    assert module._cuda_device(gpu1) is None
+
+
+def test_auto_rows_are_measured_once_and_reused(built, monkeypatch):
+    """The first chunk of at least ``AR_MEASURE_MIN_ROWS`` rows stores the
+    peak per row; later calls size chunks from it without measuring again."""
+    # 1200 rows peak at 1.2 MB: 1000 B/row; 0.8 * 625 kB fits 500 rows.
+    starts = _fake_cuda(monkeypatch, free_bytes=625_000, peak_bytes=1_200_000)
+    spy = _Rows(built, monkeypatch)
+    assert spy.draw(600) == [1200] * 10  # unmeasured: up to AR_ROW_CHUNK_SIZE
+    assert spy.approximator._ar_row_bytes == pytest.approx(1000)
+    assert spy.draw(600) == [500] * 10 + [500] * 10 + [200] * 10
+    assert spy.draw(600) == [500] * 10 + [500] * 10 + [200] * 10
+    assert len(starts) == 1
+    # an integer is used as given and leaves the measurement alone
+    assert spy.draw(600, condition_chunk_size=700) == [700] * 10 + [500] * 10
+    assert len(starts) == 1
+
+
+def test_auto_rows_skip_measuring_small_chunks(built, monkeypatch):
+    """A chunk below ``AR_MEASURE_MIN_ROWS`` is dominated by fixed overhead,
+    so it is not stored."""
+    starts = _fake_cuda(monkeypatch, free_bytes=625_000, peak_bytes=1_200_000)
+    spy = _Rows(built, monkeypatch)
+    assert spy.draw(100) == [200] * 10
+    assert starts == [] and spy.approximator._ar_row_bytes is None
+
+
+def test_auto_rows_scale_with_items(built, monkeypatch):
+    """More items than measured at cost proportionally more per row; fewer
+    keep the stored cost."""
+    from bayesflow_irt import approximators as module
+
+    _fake_cuda(monkeypatch, free_bytes=1_000_000, peak_bytes=1)
+    approximator = built[1]
+    monkeypatch.setattr(approximator, "_ar_row_bytes", 1000.0)
+    monkeypatch.setattr(approximator, "_ar_row_items", 10)
+    device = module._cuda_device(None)
+    assert approximator._auto_row_chunk(10, 10**6, device) == 800
+    assert approximator._auto_row_chunk(20, 10**6, device) == 400
+    assert approximator._auto_row_chunk(5, 10**6, device) == 800
+    assert approximator._auto_row_chunk(10, 300, device) == 300
+
+
+def test_auto_rows_shrink_on_out_of_memory(built, monkeypatch):
+    """A chunk that runs out of memory shrinks by ``CHUNK_SHRINK`` until it
+    fits, and the stored per-row cost grows so the next call starts there."""
+    # stored 1000 B/row and 1.5 MB free: chunks of 1200, which OOM above 600
+    _fake_cuda(monkeypatch, free_bytes=1_500_000, peak_bytes=1)
+    spy = _Rows(built, monkeypatch, oom_above=600)
+    monkeypatch.setattr(spy.approximator, "_ar_row_bytes", 1000.0)
+    monkeypatch.setattr(spy.approximator, "_ar_row_items", 10)
+    # 1200 -> 900 -> 675 -> 506 fits: chunks 506, 506, 188
+    assert spy.draw(600) == [506] * 10 + [506] * 10 + [188] * 10
+    assert spy.approximator._ar_row_bytes == pytest.approx(1000 / 0.75**3)
+    rows = spy.draw(600)
+    assert max(rows) <= 600 and sum(rows) == 1200 * 10
+
+
+def test_auto_rows_measure_the_chunk_that_fits_after_out_of_memory(built, monkeypatch):
+    """Without a stored cost, the first chunk that fits after an
+    out-of-memory error is measured even below ``AR_MEASURE_MIN_ROWS``, so a
+    loop of calls does not run out of memory on every call."""
+    # 1200 -> 900 -> 675 -> 506 fits; its 506 kB peak is 1000 B/row.
+    starts = _fake_cuda(monkeypatch, free_bytes=750_000, peak_bytes=506_000)
+    spy = _Rows(built, monkeypatch, oom_above=600)
+    # 0.8 * 750 kB / 1000 B = 600 rows for the rest and for later calls
+    assert spy.draw(600) == [506] * 10 + [600] * 10 + [94] * 10
+    assert spy.approximator._ar_row_bytes == pytest.approx(1000)
+    attempts = len(starts)  # one per attempt of the first chunk
+    assert spy.draw(600) == [600] * 10 + [600] * 10
+    assert len(starts) == attempts
+
+
+def test_fixed_rows_do_not_retry_out_of_memory(built, monkeypatch):
+    """An integer ``condition_chunk_size`` is the caller's choice: an
+    out-of-memory error propagates (``evaluation.sample_posterior`` handles
+    it)."""
+    import torch
+
+    _fake_cuda(monkeypatch, free_bytes=10**9, peak_bytes=1)
+    spy = _Rows(built, monkeypatch, oom_above=100)
+    with pytest.raises(torch.cuda.OutOfMemoryError):
+        spy.draw(600, condition_chunk_size=200)
 
 
 @pytest.mark.parametrize("pooling", _POOLINGS)

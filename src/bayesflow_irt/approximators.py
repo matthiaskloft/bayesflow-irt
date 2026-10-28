@@ -9,6 +9,7 @@ per-item embeddings.
 
 from __future__ import annotations
 
+import gc
 import logging
 import warnings
 
@@ -20,12 +21,50 @@ from bayesflow.approximators.continuous_approximator import ContinuousApproximat
 from bayesflow.networks import InferenceNetwork
 
 from .draws_summary import DrawsSummary
+from .evaluation import CHUNK_SHRINK, MEMORY_SHARE, _drop_tracebacks, _torch_cuda
+from .utils import is_oom_error, safe_empty_cache
 
-# Default (dataset, draw) rows per autoregressive flow call. A coupling-flow
-# call costs about the same from 1 to ~65k rows (Python dispatch dominates),
-# so fewer, larger calls are much faster; the cap keeps a call's activations
-# near 100 MiB for the default CouplingFlow.
+# (dataset, draw) rows per autoregressive chunk without a memory measurement:
+# the fixed size off CUDA, and the first chunk of ``condition_chunk_size=
+# "auto"`` on CUDA. A flow call costs about the same from 1 to ~65k rows
+# (Python dispatch dominates), so fewer, larger calls are much faster.
 AR_ROW_CHUNK_SIZE = 16384
+# Smallest chunk whose peak memory is stored for "auto": in a smaller chunk
+# the fixed overhead would inflate the per-row cost.
+AR_MEASURE_MIN_ROWS = 1024
+
+
+def _cuda_device(tensor):
+    """The CUDA device ``tensor`` lives on, or ``None`` (CPU, other backend)."""
+    if not _torch_cuda():
+        return None
+    device = getattr(tensor, "device", None)
+    return device if getattr(device, "type", None) == "cuda" else None
+
+
+def _device_peak_start(device) -> int:
+    """Reset PyTorch's peak-memory counter; return the allocated bytes."""
+    import torch
+
+    torch.cuda.reset_peak_memory_stats(device)
+    return torch.cuda.memory_allocated(device)
+
+
+def _device_peak_since(device, base: int) -> int:
+    """Peak allocated bytes above ``base`` since :func:`_device_peak_start`."""
+    import torch
+
+    return max(torch.cuda.max_memory_allocated(device) - base, 1)
+
+
+def _device_free_bytes(device) -> int:
+    """Free device memory plus memory the caching allocator holds unused."""
+    import torch
+
+    return torch.cuda.mem_get_info(device)[0] + (
+        torch.cuda.memory_reserved(device) - torch.cuda.memory_allocated(device)
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +257,11 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         self.gradient_accumulation_steps = int(gradient_accumulation_steps)
         self._global_condition_dim = 0
         self._accum_step = 0
+        # condition_chunk_size="auto": device bytes per (dataset, draw) row of
+        # an autoregressive chunk and the item count it was measured at; set
+        # once, on the first measured chunk, and reused by later calls.
+        self._ar_row_bytes: float | None = None
+        self._ar_row_items = 0
         self.draws_summary_pooling = draws_summary_pooling
         self.draws_summary_hidden_dim = int(draws_summary_hidden_dim)
         self.draws_summary_dim = int(draws_summary_dim)
@@ -735,11 +779,13 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             placeholders are injected automatically.
         summary_variables : Tensor
             Response matrix ``(batch, P, I)`` or ``(batch, P, I, K)``.
-        condition_chunk_size : int
-            Max ``(dataset, draw)`` rows per chunk (default
-            ``AR_ROW_CHUNK_SIZE`` = 16384); each chunk makes ``num_items``
-            sequential flow calls, so larger chunks are faster until GPU
-            memory runs out.
+        condition_chunk_size : int or "auto"
+            Max ``(dataset, draw)`` rows per chunk; each chunk makes
+            ``num_items`` sequential flow calls, so larger chunks are faster
+            until GPU memory runs out. ``"auto"`` (default) sizes chunks from
+            free device memory on PyTorch with CUDA (see
+            :meth:`_sample_autoregressive`) and is ``AR_ROW_CHUNK_SIZE`` =
+            16384 otherwise. An integer is used as given.
         flow_sample_kwargs : dict
             Extra keyword arguments forwarded to
             ``inference_network.sample(...)``. Use this for FlowMatching
@@ -780,16 +826,18 @@ class EquivariantIRTApproximator(ContinuousApproximator):
                 dtype=keras.ops.dtype(summary_outputs),
             )
 
-        condition_chunk_size = int(
-            kwargs.pop("condition_chunk_size", AR_ROW_CHUNK_SIZE)
-        )
+        condition_chunk_size = kwargs.pop("condition_chunk_size", "auto")
         flow_sample_kwargs = kwargs.pop("flow_sample_kwargs", None)
         if flow_sample_kwargs is None:
             flow_sample_kwargs = {}
         elif not isinstance(flow_sample_kwargs, dict):
             raise TypeError("flow_sample_kwargs must be a dict or None.")
-        if condition_chunk_size <= 0:
-            raise ValueError("condition_chunk_size must be a positive integer.")
+        if condition_chunk_size != "auto":
+            condition_chunk_size = int(condition_chunk_size)
+            if condition_chunk_size <= 0:
+                raise ValueError(
+                    "condition_chunk_size must be a positive integer or 'auto'."
+                )
 
         return self._sample_autoregressive(
             num_samples,
@@ -812,6 +860,26 @@ class EquivariantIRTApproximator(ContinuousApproximator):
 
         Rows are ``(dataset, draw)`` pairs, processed ``row_chunk_size`` at a
         time. Returns ``(batch, num_samples, num_items, param_dim)``.
+
+        ``row_chunk_size="auto"`` on PyTorch with CUDA sizes chunks from
+        device memory, the rule of :func:`bayesflow_irt.evaluation.
+        _auto_chunk_size` applied to rows: :data:`MEMORY_SHARE` of the free
+        memory over the peak bytes per row. That peak is measured once per
+        approximator, on the first chunk of at least
+        :data:`AR_MEASURE_MIN_ROWS` rows (sampled at most
+        :data:`AR_ROW_CHUNK_SIZE` rows) or the first that fits after an
+        out-of-memory error, and reused by every later chunk and
+        call, scaled up linearly for more items than it was measured at. A
+        chunk that runs out of memory shrinks to :data:`CHUNK_SHRINK` of its
+        size and is retried, and the stored peak grows to match. Chunking
+        then depends on free memory, so a fixed ``seed`` reproduces draws
+        exactly only with an integer ``row_chunk_size``. When the summary
+        outputs are not on a CUDA device, ``"auto"`` is ``AR_ROW_CHUNK_SIZE``.
+
+        References
+        ----------
+        PyTorch Team. CUDA semantics: memory management.
+        https://docs.pytorch.org/docs/stable/notes/cuda.html#memory-management
         """
         batch_size = self._static_dim(summary_outputs, 0, "summary_outputs")
         num_items = self._static_dim(summary_outputs, 1, "summary_outputs")
@@ -825,46 +893,114 @@ class EquivariantIRTApproximator(ContinuousApproximator):
                 **flow_sample_kwargs,
                 "seed": keras.random.SeedGenerator(int(seed)),
             }
+        # Memory is read on the device the draws are made on; sampling on
+        # the CPU of a CUDA host would otherwise measure an idle GPU.
+        device = _cuda_device(summary_outputs) if row_chunk_size == "auto" else None
+        auto = device is not None
+        if auto:
+            size = self._auto_row_chunk(num_items, total, device)
+        elif row_chunk_size == "auto":
+            size = AR_ROW_CHUNK_SIZE
+        else:
+            size = row_chunk_size
         out = []
-        for start in range(0, total, row_chunk_size):
-            rows = np.arange(start, min(start + row_chunk_size, total))
-            n = len(rows)
-            b_idx = ops.convert_to_tensor(rows // num_samples, dtype="int32")
-            h = ops.take(summary_outputs, b_idx, axis=0)  # (n, I, D)
-            fixed = (
-                []
-                if inference_conditions is None
-                else [ops.take(inference_conditions, b_idx, axis=0)]
+        start = 0
+        shrunk = False
+        while start < total:
+            stop = min(start + size, total)
+            # After an out-of-memory error memory is the limit, so the chunk
+            # that fits is measured whatever its size; otherwise later calls
+            # would run out of memory again.
+            measure = (
+                auto
+                and self._ar_row_bytes is None
+                and (shrunk or stop - start >= AR_MEASURE_MIN_ROWS)
             )
-            summary = self.draws_summary
-            # "mean" keeps a running sum (O(I)); the other poolings need the
-            # earlier phi values themselves, kept stacked.
-            run_sum = ops.zeros((n, summary.hidden_dim), dtype=h.dtype)
-            prev = []
-            drawn = []
-            for i in range(num_items):
-                h_i = h[:, i]
-                if summary.pooling == "mean":
-                    count = ops.full((n, 1), float(i), dtype=h.dtype)
-                    s = summary.from_prefix_sum(run_sum, count)
-                else:
-                    stacked = ops.stack(prev, axis=1) if prev else None
-                    s = summary.from_prefix(stacked, h_i, i)
-                cond = ops.concatenate([h_i, s, *fixed], axis=-1)
-                x_i = self.inference_network.sample(
-                    (n, 1), conditions=ops.expand_dims(cond, 1), **flow_sample_kwargs
-                )[:, 0, :]
-                phi = summary.phi_values(x_i, h_i)
-                if summary.pooling == "mean":
-                    run_sum = run_sum + phi
-                else:
-                    prev.append(phi)
-                drawn.append(x_i)
-            out.append(ops.stack(drawn, axis=1))  # (n, I, P)
+            base = _device_peak_start(device) if measure else 0
+            oom = None
+            try:
+                out.append(
+                    self._sample_rows(
+                        np.arange(start, stop),
+                        num_samples,
+                        summary_outputs,
+                        inference_conditions,
+                        flow_sample_kwargs,
+                    )
+                )
+            except Exception as exc:
+                if not (auto and is_oom_error(exc)):
+                    raise
+                oom = _drop_tracebacks(exc)
+            if oom is None:
+                if measure:
+                    peak = _device_peak_since(device, base)
+                    self._ar_row_bytes = peak / (stop - start)
+                    self._ar_row_items = num_items
+                    size = self._auto_row_chunk(num_items, total - stop, device)
+                start = stop
+                continue
+            # Shrink outside the except block, whose traceback would keep the
+            # failed chunk's tensors allocated (see evaluation.sample_posterior).
+            gc.collect()
+            safe_empty_cache()
+            if stop - start < 2:
+                raise oom
+            size = min(stop - start - 1, max(1, int((stop - start) * CHUNK_SHRINK)))
+            shrunk = True
+            if self._ar_row_bytes is not None:
+                self._ar_row_bytes /= CHUNK_SHRINK
         samples = ops.concatenate(out, axis=0)
         return ops.reshape(
             samples, (batch_size, num_samples, num_items, samples.shape[-1])
         )
+
+    def _auto_row_chunk(self, num_items: int, remaining: int, device) -> int:
+        """Rows per chunk for ``"auto"`` from the stored per-row peak."""
+        if self._ar_row_bytes is None:
+            return min(remaining, AR_ROW_CHUNK_SIZE)
+        per_row = self._ar_row_bytes * max(1.0, num_items / self._ar_row_items)
+        fit = MEMORY_SHARE * _device_free_bytes(device) // per_row
+        return int(min(remaining, max(1, fit)))
+
+    def _sample_rows(
+        self, rows, num_samples, summary_outputs, inference_conditions, flow_kwargs
+    ):
+        """Draw all items for the ``(dataset, draw)`` rows ``rows``: ``(n, I, P)``."""
+        n = len(rows)
+        num_items = self._static_dim(summary_outputs, 1, "summary_outputs")
+        b_idx = ops.convert_to_tensor(rows // num_samples, dtype="int32")
+        h = ops.take(summary_outputs, b_idx, axis=0)  # (n, I, D)
+        fixed = (
+            []
+            if inference_conditions is None
+            else [ops.take(inference_conditions, b_idx, axis=0)]
+        )
+        summary = self.draws_summary
+        # "mean" keeps a running sum (O(I)); the other poolings need the
+        # earlier phi values themselves, kept stacked.
+        run_sum = ops.zeros((n, summary.hidden_dim), dtype=h.dtype)
+        prev = []
+        drawn = []
+        for i in range(num_items):
+            h_i = h[:, i]
+            if summary.pooling == "mean":
+                count = ops.full((n, 1), float(i), dtype=h.dtype)
+                s = summary.from_prefix_sum(run_sum, count)
+            else:
+                stacked = ops.stack(prev, axis=1) if prev else None
+                s = summary.from_prefix(stacked, h_i, i)
+            cond = ops.concatenate([h_i, s, *fixed], axis=-1)
+            x_i = self.inference_network.sample(
+                (n, 1), conditions=ops.expand_dims(cond, 1), **flow_kwargs
+            )[:, 0, :]
+            phi = summary.phi_values(x_i, h_i)
+            if summary.pooling == "mean":
+                run_sum = run_sum + phi
+            else:
+                prev.append(phi)
+            drawn.append(x_i)
+        return ops.stack(drawn, axis=1)
 
     def sample(
         self,
