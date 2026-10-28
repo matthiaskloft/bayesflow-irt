@@ -34,27 +34,35 @@ AR_ROW_CHUNK_SIZE = 16384
 AR_MEASURE_MIN_ROWS = 1024
 
 
-def _device_peak_start() -> int:
+def _cuda_device(tensor):
+    """The CUDA device ``tensor`` lives on, or ``None`` (CPU, other backend)."""
+    if not _torch_cuda():
+        return None
+    device = getattr(tensor, "device", None)
+    return device if getattr(device, "type", None) == "cuda" else None
+
+
+def _device_peak_start(device) -> int:
     """Reset PyTorch's peak-memory counter; return the allocated bytes."""
     import torch
 
-    torch.cuda.reset_peak_memory_stats()
-    return torch.cuda.memory_allocated()
+    torch.cuda.reset_peak_memory_stats(device)
+    return torch.cuda.memory_allocated(device)
 
 
-def _device_peak_since(base: int) -> int:
+def _device_peak_since(device, base: int) -> int:
     """Peak allocated bytes above ``base`` since :func:`_device_peak_start`."""
     import torch
 
-    return max(torch.cuda.max_memory_allocated() - base, 1)
+    return max(torch.cuda.max_memory_allocated(device) - base, 1)
 
 
-def _device_free_bytes() -> int:
+def _device_free_bytes(device) -> int:
     """Free device memory plus memory the caching allocator holds unused."""
     import torch
 
-    return torch.cuda.mem_get_info()[0] + (
-        torch.cuda.memory_reserved() - torch.cuda.memory_allocated()
+    return torch.cuda.mem_get_info(device)[0] + (
+        torch.cuda.memory_reserved(device) - torch.cuda.memory_allocated(device)
     )
 
 
@@ -865,8 +873,8 @@ class EquivariantIRTApproximator(ContinuousApproximator):
         chunk that runs out of memory shrinks to :data:`CHUNK_SHRINK` of its
         size and is retried, and the stored peak grows to match. Chunking
         then depends on free memory, so a fixed ``seed`` reproduces draws
-        exactly only with an integer ``row_chunk_size``. Without CUDA,
-        ``"auto"`` is ``AR_ROW_CHUNK_SIZE``.
+        exactly only with an integer ``row_chunk_size``. When the summary
+        outputs are not on a CUDA device, ``"auto"`` is ``AR_ROW_CHUNK_SIZE``.
 
         References
         ----------
@@ -885,9 +893,12 @@ class EquivariantIRTApproximator(ContinuousApproximator):
                 **flow_sample_kwargs,
                 "seed": keras.random.SeedGenerator(int(seed)),
             }
-        auto = row_chunk_size == "auto" and _torch_cuda()
+        # Memory is read on the device the draws are made on; sampling on
+        # the CPU of a CUDA host would otherwise measure an idle GPU.
+        device = _cuda_device(summary_outputs) if row_chunk_size == "auto" else None
+        auto = device is not None
         if auto:
-            size = self._auto_row_chunk(num_items, total)
+            size = self._auto_row_chunk(num_items, total, device)
         elif row_chunk_size == "auto":
             size = AR_ROW_CHUNK_SIZE
         else:
@@ -905,7 +916,7 @@ class EquivariantIRTApproximator(ContinuousApproximator):
                 and self._ar_row_bytes is None
                 and (shrunk or stop - start >= AR_MEASURE_MIN_ROWS)
             )
-            base = _device_peak_start() if measure else 0
+            base = _device_peak_start(device) if measure else 0
             oom = None
             try:
                 out.append(
@@ -923,9 +934,10 @@ class EquivariantIRTApproximator(ContinuousApproximator):
                 oom = _drop_tracebacks(exc)
             if oom is None:
                 if measure:
-                    self._ar_row_bytes = _device_peak_since(base) / (stop - start)
+                    peak = _device_peak_since(device, base)
+                    self._ar_row_bytes = peak / (stop - start)
                     self._ar_row_items = num_items
-                    size = self._auto_row_chunk(num_items, total - stop)
+                    size = self._auto_row_chunk(num_items, total - stop, device)
                 start = stop
                 continue
             # Shrink outside the except block, whose traceback would keep the
@@ -943,12 +955,12 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             samples, (batch_size, num_samples, num_items, samples.shape[-1])
         )
 
-    def _auto_row_chunk(self, num_items: int, remaining: int) -> int:
+    def _auto_row_chunk(self, num_items: int, remaining: int, device) -> int:
         """Rows per chunk for ``"auto"`` from the stored per-row peak."""
         if self._ar_row_bytes is None:
             return min(remaining, AR_ROW_CHUNK_SIZE)
         per_row = self._ar_row_bytes * max(1.0, num_items / self._ar_row_items)
-        fit = MEMORY_SHARE * _device_free_bytes() // per_row
+        fit = MEMORY_SHARE * _device_free_bytes(device) // per_row
         return int(min(remaining, max(1, fit)))
 
     def _sample_rows(
