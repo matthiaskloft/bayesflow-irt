@@ -293,3 +293,26 @@ def test_variable_prior_round_trip(parent_checkpoint, tmp_path):
     sigma = sim.sample((20,))["sigma_b"]
     assert np.all((sigma >= 0.2) & (sigma <= 1))
     assert result.item_posteriors["b"].shape == (5, 4)
+
+
+def test_parent_accumulation_not_inherited(parent_checkpoint, tmp_path, monkeypatch):
+    import bayesflow_irt.adaptation as module
+
+    real_load = keras.saving.load_model
+
+    def load(*args, **kwargs):
+        model = real_load(*args, **kwargs)
+        model.gradient_accumulation_steps = 4
+        return model
+
+    monkeypatch.setattr(module.keras.saving, "load_model", load)
+    seen = []
+    real_fit = module.fit_with_oom_retry
+
+    def fit(model, simulator, **kwargs):
+        seen.append(model.gradient_accumulation_steps)
+        return real_fit(model, simulator, **kwargs)
+
+    monkeypatch.setattr(module, "fit_with_oom_retry", fit)
+    run(parent_checkpoint, tmp_path / "accum")
+    assert seen == [1]

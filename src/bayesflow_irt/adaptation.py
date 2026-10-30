@@ -190,6 +190,9 @@ def adapt_and_fit(
     if sigma_keys != simulated_sigma_keys:
         raise ValueError("Prior overrides must preserve the adapter's sigma conditions")
     initial_weights = weights_digest(model)
+    # A fresh run: the parent's (possibly OOM-raised) accumulation is not inherited.
+    if hasattr(model, "gradient_accumulation_steps"):
+        model.gradient_accumulation_steps = 1
     model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate))
     training_start = perf_counter()
     training = fit_with_oom_retry(
@@ -204,6 +207,10 @@ def adapt_and_fit(
         np.all(np.isfinite(values)) for values in history.values()
     ):
         raise RuntimeError("Adaptation did not complete all epochs with finite metrics")
+    if training.config.gradient_accumulation_steps > num_batches:
+        raise RuntimeError(
+            "Gradient accumulation exceeds num_batches; no optimizer update ran"
+        )
     training_seconds = perf_counter() - training_start
     tracker = MetadataTracker(
         model=spec["model"],
