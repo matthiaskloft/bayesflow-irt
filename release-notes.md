@@ -1,11 +1,11 @@
-### Changed
+### Added
 
-- `condition_chunk_size` for autoregressive sampling defaults to `"auto"`.
-  On PyTorch with CUDA the first chunk (at most 16384 rows) measures the
-  peak device memory per `(dataset, draw)` row once per approximator; every
-  later chunk and call, such as a loop of SBC or scoring calls, fills 80% of
-  the free device memory from that measurement, scaled up for more items. A
-  chunk that runs out of memory shrinks by a quarter and is retried. Without
-  CUDA it stays 16384 rows. With `"auto"`, chunking depends on free memory,
-  so pass an integer `condition_chunk_size` to reproduce seeded draws
-  exactly; an integer is used as given and out-of-memory errors propagate.
+- `adapt_and_fit` and `AdaptationResult`: explicit target-size adaptation.
+  Fine-tunes a pretrained checkpoint on fresh simulations at the observed
+  matrix's dimensions using the recorded priors, saves a distinct checkpoint
+  and metadata sidecar (published only after save, reload and a weight-digest
+  check), then draws item posteriors and optionally scores persons.
+  `prior_overrides` accepts `Prior` or `VariablePrior` objects; observed
+  responses are never training targets. The parent's gradient accumulation is
+  not inherited, and masked response cells are rejected.
+- Recorded `VariablePrior` specifications can be rebuilt from metadata.
