@@ -29,6 +29,7 @@ from .priors import (
     ParameterRole,
     Prior,
     PriorSpec,
+    VariablePrior,
     make_incremental_prior,
     resolve_prior,
 )
@@ -1329,13 +1330,24 @@ _REQUIRED_PRIORS = {
 }
 
 
-def _prior_from_record(record: Any, key: str) -> Prior:
+def _prior_from_record(record: Any, key: str) -> Prior | VariablePrior:
     """Build a :class:`Prior` from a recorded ``{"name": ..., **kwargs}``."""
     if not isinstance(record, Mapping) or not isinstance(record.get("name"), str):
         raise ValueError(
             f"Prior {key!r} is recorded as {record!r}, not as "
             "{'name': ..., **kwargs}; a custom prior cannot be rebuilt from "
             "metadata. Pass the training simulator explicitly instead."
+        )
+    if record.get("kind") == "variable":
+        if not {"role", "scale_range"} <= record.keys():
+            raise ValueError(
+                f"Recorded variable prior {key!r} needs 'role' and 'scale_range'."
+            )
+        return VariablePrior(
+            record["name"],
+            role=record["role"],
+            scale_range=tuple(record["scale_range"]),
+            **record.get("fixed_kwargs", {}),
         )
     kwargs = {k: v for k, v in record.items() if k != "name"}
     return Prior(record["name"], **kwargs)

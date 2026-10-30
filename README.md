@@ -100,6 +100,57 @@ On Windows, run Jupyter with a kernel that imports `torch` first
 ([scripts/ipykernel_torch_preload.py](scripts/ipykernel_torch_preload.py));
 otherwise loading `pyzmq` before `torch` can crash with `WinError 1114`.
 
+## Target-size adaptation
+
+Target-size adaptation is explicit through `adapt_and_fit`: it initializes from
+a pretrained checkpoint, trains on fresh simulations at the observed matrix's
+dimensions using the recorded priors, saves a distinct checkpoint and metadata,
+then reloads it for item inference. Observed responses are never training targets.
+
+```python
+from bayesflow_irt import adapt_and_fit
+
+result = adapt_and_fit(
+    "parent.keras", responses, "new_adapted_run",
+    metadata="parent_metadata.json",
+    epochs=2, num_batches=10, batch_size=4, learning_rate=1e-4, seed=42,
+    n_item_samples=100, fit_kwargs={"workers": 0}, score_kwargs={},
+)
+result.scorer.score(new_person_responses)  # reuse the inferred item draws
+```
+
+The output directory must be new. Results include checkpoint/sidecar paths,
+training history, item draws, and separate adaptation, inference and scoring
+times. Training or persistence failures raise before inference. Omit
+`score_kwargs` to defer scoring. The checkpoint can later be loaded with
+`keras.saving.load_model(result.checkpoint, compile=False)` for inference without
+retraining. See [examples/adapt_1pl.py](examples/adapt_1pl.py) for a small example.
+Validate adapted models on fresh target-size simulations before accuracy or
+calibration claims; million-person feasibility is a separate experiment.
+
+Pass existing prior objects to replace any recorded priors during fine-tuning:
+
+```python
+from bayesflow_irt import Prior
+
+# Add this argument to adapt_and_fit(...):
+prior_overrides = {
+    "b": Prior("normal", loc=0, scale=1.5),
+    "a": Prior("gamma", concentration=4, scale=0.25),  # 2PL/GPCM
+    "theta": Prior("normal", loc=0, scale=1.2),
+}
+```
+
+Each entry replaces the entire prior; omitted entries keep the parent's prior.
+The simulator uses these priors and the adapted sidecar records both the new
+specification and overrides. Parent files and adapter transforms stay unchanged.
+`VariablePrior` objects are also accepted when they preserve the pretrained
+adapter's sigma condition keys. Bare callables cannot be persisted and are
+rejected. Prior names and distributions are checked by the existing simulator
+and prior utilities. Normal theta priors are also used for person scoring;
+other theta distributions support item inference, return `scorer=None`, and
+raise before training if `score_kwargs` requests unsupported person scoring.
+
 ## Development
 
 ```bash
