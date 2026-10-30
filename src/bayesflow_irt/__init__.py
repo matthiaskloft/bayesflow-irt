@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("bayesflow-irt")
 except PackageNotFoundError:
-    __version__ = "0.4.0"  # fallback for uninstalled (e.g. raw checkout)
+    __version__ = "0.5.0"  # fallback for uninstalled (e.g. raw checkout)
 
 from .adaptation import AdaptationResult, adapt_and_fit
 from .adapters import (
