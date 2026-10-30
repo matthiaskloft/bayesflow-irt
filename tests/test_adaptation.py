@@ -316,3 +316,21 @@ def test_parent_accumulation_not_inherited(parent_checkpoint, tmp_path, monkeypa
     monkeypatch.setattr(module, "fit_with_oom_retry", fit)
     run(parent_checkpoint, tmp_path / "accum")
     assert seen == [1]
+
+
+def test_masked_responses_rejected(parent_checkpoint, tmp_path):
+    checkpoint, metadata = parent_checkpoint
+    responses = np.ma.masked_array(np.zeros((12, 4)), mask=np.eye(12, 4, dtype=bool))
+    with pytest.raises(ValueError, match="masked"):
+        adapt_and_fit(
+            checkpoint,
+            responses,
+            tmp_path / "masked",
+            metadata=metadata,
+            epochs=1,
+            num_batches=1,
+            batch_size=2,
+            learning_rate=1e-4,
+            seed=0,
+        )
+    assert not (tmp_path / "masked").exists()

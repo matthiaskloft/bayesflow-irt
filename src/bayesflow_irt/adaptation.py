@@ -141,6 +141,8 @@ def adapt_and_fit(
     if score_kwargs is not None and not normal_theta:
         raise ValueError("PersonScorer requires a fixed Normal theta prior")
     theta_prior = (theta.get("loc", 0.0), theta.get("scale", 1.0))
+    if np.ma.is_masked(responses):
+        raise ValueError("responses must not contain masked (missing) cells")
     responses = np.asarray(responses)
     if responses.ndim != 2:
         raise ValueError("responses must be a 2-D (persons, items) matrix")
