@@ -7,6 +7,7 @@ try:
 except PackageNotFoundError:
     __version__ = "0.4.0"  # fallback for uninstalled (e.g. raw checkout)
 
+from .adaptation import AdaptationResult, adapt_and_fit
 from .adapters import (
     LogTransform,
     OneHotEncode,
@@ -109,6 +110,8 @@ from .utils import (
 )
 
 __all__ = [
+    "AdaptationResult",
+    "adapt_and_fit",
     "MatrixEquivariantIRTSummary",
     "EquivariantIRTApproximator",
     "DrawsSummary",
