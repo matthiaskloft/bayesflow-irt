@@ -499,7 +499,8 @@ class MetadataTracker:
             Ranges for P and I (``model_spec``). A ``n_categories`` entry is
             moved to ``model_spec.n_categories``.
         hparams : dict, optional
-            Hyperparameters. ``summary`` and ``flow`` become ``architecture``;
+            Hyperparameters. ``summary``, ``flow`` and ``item_posterior`` become
+            ``architecture``;
             ``base_checkpoint`` and the ``refine_*`` entries become
             ``training.refinement``; ``n_categories`` goes to ``model_spec``;
             everything else lands in ``training``.

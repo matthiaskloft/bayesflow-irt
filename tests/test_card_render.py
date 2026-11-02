@@ -272,12 +272,17 @@ def test_item_posterior_limitation(card_dir, tmp_path):
         assert expected in text
 
 
-def test_item_posterior_read_from_training(card_dir, tmp_path):
-    # Older sidecars hold item_posterior under training, not architecture.
+@pytest.mark.parametrize("arch_value", ["absent", None])
+def test_item_posterior_read_from_training(card_dir, tmp_path, arch_value):
+    # Older sidecars hold item_posterior under training, not architecture;
+    # upgraded v1 files carry an explicit architecture.item_posterior of None.
     out = _copy(card_dir, tmp_path)
     side = tmp_path / "m_metadata.json"
     md = json.loads(side.read_text("utf-8"))
-    md.setdefault("architecture", {}).pop("item_posterior", None)
+    arch = md.setdefault("architecture", {})
+    arch.pop("item_posterior", None)
+    if arch_value is None:
+        arch["item_posterior"] = None
     md.setdefault("training", {})["item_posterior"] = "autoregressive_coupling_flow"
     side.write_text(json.dumps(md), encoding="utf-8")
     text = cr.render_markdown(cr.load_card_inputs(out))

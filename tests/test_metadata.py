@@ -628,6 +628,15 @@ class TestUpgradeV1ToV2Golden:
 
 
 class TestUpgradeV1ToV2Unit:
+    def test_item_posterior_is_explicitly_not_recorded(self):
+        from bayesflow_irt.metadata import upgrade_v1_to_v2
+
+        old = {
+            "model_info": {"model": "2PL", "variant": "fixed", "version": "0.1.0"},
+            "training_config": {"hparams": {"summary": {"d": 1}}},
+        }
+        assert upgrade_v1_to_v2(old)["architecture"]["item_posterior"] is None
+
     def test_pure_function_does_not_mutate_input(self):
         from bayesflow_irt.metadata import upgrade_v1_to_v2
 

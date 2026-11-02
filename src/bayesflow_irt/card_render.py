@@ -655,8 +655,7 @@ def _limitations(inp: CardInputs) -> list[str]:
     elif item_posterior == "autoregressive_coupling_flow":
         out.append(
             "Item parameters are drawn jointly (autoregressively) given the "
-            "summary, so dependence across items is modelled; the joint TARP "
-            "rows show how well."
+            "summary, so dependence across items is modelled."
         )
     if not rec["protocol"].get("include_out_of_range"):
         out.append(
