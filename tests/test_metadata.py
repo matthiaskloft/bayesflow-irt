@@ -129,6 +129,7 @@ class TestPhaseBuilders:
             hparams={
                 "summary": {"embed_dim": 32},
                 "flow": {"widths": [128]},
+                "item_posterior": "autoregressive_coupling_flow",
                 "base_checkpoint": "base.keras",
                 "refine_epochs": 2,
                 "epochs": 8,
@@ -140,7 +141,9 @@ class TestPhaseBuilders:
         assert data["architecture"] == {
             "summary": {"embed_dim": 32},
             "flow": {"widths": [128]},
+            "item_posterior": "autoregressive_coupling_flow",
         }
+        assert "item_posterior" not in data["training"]
         assert data["training"]["epochs"] == 8
         assert data["training"]["seed"] == 7
         assert data["training"]["refinement"] == {

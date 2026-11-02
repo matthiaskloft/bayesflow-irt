@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Model card: the item-posterior type was reported as "not recorded" for
+  models whose hyperparameters arrive flat (e.g. from HPO trials), because the
+  metadata tracker filed `item_posterior` under `training` while the card read
+  it from `architecture`. The tracker now files it under `architecture`, the
+  card falls back to `training` for existing sidecars, and autoregressive
+  coupling flows get their own limitation note (items drawn jointly).
+
 ## [0.5.0] - 2026-10-30
 
 ### Added

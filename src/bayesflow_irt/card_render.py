@@ -628,7 +628,11 @@ def _limitations(inp: CardInputs) -> list[str]:
             f"validated for {', '.join(rec.get('draws_validated_for', [])) or 'no'} "
             f"models only, not for {family.upper()}."
         )
-    item_posterior = (md.get("architecture") or {}).get("item_posterior")
+    # Sidecars written before ``item_posterior`` was an architecture key hold
+    # it under ``training`` (flat HPO hyperparameters landed there).
+    item_posterior = (md.get("architecture") or {}).get("item_posterior") or (
+        md.get("training") or {}
+    ).get("item_posterior")
     if item_posterior is None:
         out.append(
             "The item-posterior type is not recorded, so whether items are "
@@ -647,6 +651,12 @@ def _limitations(inp: CardInputs) -> list[str]:
             "Item parameters are drawn independently given the summary, so "
             "uncertainty all items share can be missing and joint statements "
             f"across items for the {family.upper()} may be overconfident."
+        )
+    elif item_posterior == "autoregressive_coupling_flow":
+        out.append(
+            "Item parameters are drawn jointly (autoregressively) given the "
+            "summary, so dependence across items is modelled; the joint TARP "
+            "rows show how well."
         )
     if not rec["protocol"].get("include_out_of_range"):
         out.append(

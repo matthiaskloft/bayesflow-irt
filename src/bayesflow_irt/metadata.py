@@ -37,7 +37,7 @@ _REQUIRED_MODEL_SPEC_KEYS = {"model", "variant", "version"}
 _REQUIRED_PROVENANCE_KEYS = {"git_commit", "timestamp"}
 
 # v1 ``training_config.hparams`` entries and where they go in v2.
-_ARCHITECTURE_KEYS = ("summary", "flow")
+_ARCHITECTURE_KEYS = ("summary", "flow", "item_posterior")
 _REFINEMENT_KEYS = (
     "base_checkpoint",
     "refine_epochs",
