@@ -129,6 +129,7 @@ class TestPhaseBuilders:
             hparams={
                 "summary": {"embed_dim": 32},
                 "flow": {"widths": [128]},
+                "item_posterior": "autoregressive_coupling_flow",
                 "base_checkpoint": "base.keras",
                 "refine_epochs": 2,
                 "epochs": 8,
@@ -140,7 +141,9 @@ class TestPhaseBuilders:
         assert data["architecture"] == {
             "summary": {"embed_dim": 32},
             "flow": {"widths": [128]},
+            "item_posterior": "autoregressive_coupling_flow",
         }
+        assert "item_posterior" not in data["training"]
         assert data["training"]["epochs"] == 8
         assert data["training"]["seed"] == 7
         assert data["training"]["refinement"] == {
@@ -625,6 +628,15 @@ class TestUpgradeV1ToV2Golden:
 
 
 class TestUpgradeV1ToV2Unit:
+    def test_item_posterior_is_explicitly_not_recorded(self):
+        from bayesflow_irt.metadata import upgrade_v1_to_v2
+
+        old = {
+            "model_info": {"model": "2PL", "variant": "fixed", "version": "0.1.0"},
+            "training_config": {"hparams": {"summary": {"d": 1}}},
+        }
+        assert upgrade_v1_to_v2(old)["architecture"]["item_posterior"] is None
+
     def test_pure_function_does_not_mutate_input(self):
         from bayesflow_irt.metadata import upgrade_v1_to_v2
 

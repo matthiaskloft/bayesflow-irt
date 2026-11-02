@@ -264,16 +264,30 @@ def test_item_posterior_limitation(card_dir, tmp_path):
     for value, expected in (
         (None, "item-posterior type is not recorded"),
         ("flow_matching", "joint statements across items are overconfident"),
-        ("autoregressive_coupling_flow", None),
+        ("autoregressive_coupling_flow", "drawn jointly (autoregressively)"),
     ):
         md.setdefault("architecture", {})["item_posterior"] = value
         side.write_text(json.dumps(md), encoding="utf-8")
         text = cr.render_markdown(cr.load_card_inputs(out))
-        if expected:
-            assert expected in text
-        else:
-            assert "drawn independently" not in text
-            assert "not recorded, so whether items" not in text
+        assert expected in text
+
+
+@pytest.mark.parametrize("arch_value", ["absent", None])
+def test_item_posterior_read_from_training(card_dir, tmp_path, arch_value):
+    # Older sidecars hold item_posterior under training, not architecture;
+    # upgraded v1 files carry an explicit architecture.item_posterior of None.
+    out = _copy(card_dir, tmp_path)
+    side = tmp_path / "m_metadata.json"
+    md = json.loads(side.read_text("utf-8"))
+    arch = md.setdefault("architecture", {})
+    arch.pop("item_posterior", None)
+    if arch_value is None:
+        arch["item_posterior"] = None
+    md.setdefault("training", {})["item_posterior"] = "autoregressive_coupling_flow"
+    side.write_text(json.dumps(md), encoding="utf-8")
+    text = cr.render_markdown(cr.load_card_inputs(out))
+    assert "drawn jointly (autoregressively)" in text
+    assert "not recorded, so whether items" not in text
 
 
 def test_pcm_card(tmp_path):

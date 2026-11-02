@@ -37,7 +37,7 @@ _REQUIRED_MODEL_SPEC_KEYS = {"model", "variant", "version"}
 _REQUIRED_PROVENANCE_KEYS = {"git_commit", "timestamp"}
 
 # v1 ``training_config.hparams`` entries and where they go in v2.
-_ARCHITECTURE_KEYS = ("summary", "flow")
+_ARCHITECTURE_KEYS = ("summary", "flow", "item_posterior")
 _REFINEMENT_KEYS = (
     "base_checkpoint",
     "refine_epochs",
@@ -499,7 +499,8 @@ class MetadataTracker:
             Ranges for P and I (``model_spec``). A ``n_categories`` entry is
             moved to ``model_spec.n_categories``.
         hparams : dict, optional
-            Hyperparameters. ``summary`` and ``flow`` become ``architecture``;
+            Hyperparameters. ``summary``, ``flow`` and ``item_posterior`` become
+            ``architecture``;
             ``base_checkpoint`` and the ``refine_*`` entries become
             ``training.refinement``; ``n_categories`` goes to ``model_spec``;
             everything else lands in ``training``.
