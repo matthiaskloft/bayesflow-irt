@@ -262,6 +262,18 @@ _LEGACY_RAW_FEATURE_PRESETS: dict[str, bool] = {
 }
 
 
+#: Values of the ``irt_matrix_outer_attention`` dimension, mapped to
+#: ``(use_outer_isab, num_outer_inducing_points)``. ``"full"`` is full
+#: self-attention over items; the inducing-point count is then unused and
+#: kept at the ISAB default. ``"isab16"`` is the default, so params without
+#: the key rebuild the pre-dimension architecture.
+_OUTER_ATTENTION_MODES: dict[str, tuple[bool, int]] = {
+    "isab16": (True, 16),
+    "isab32": (True, 32),
+    "full": (False, 16),
+}
+
+
 @dataclass
 class MatrixIRTSummarySpace(BaseSearchSpace):
     """Search space for :class:`MatrixEquivariantIRTSummary` hyperparameters.
@@ -285,12 +297,20 @@ class MatrixIRTSummarySpace(BaseSearchSpace):
     was removed as redundant with the Hartford EMN basis; any stored key is
     ignored.
 
+    ``irt_matrix_outer_attention`` selects how items attend to each other in
+    the outer item stage: ``"isab16"`` / ``"isab32"`` (Induced Set Attention
+    Blocks with 16 / 32 inducing points) or ``"full"`` (full self-attention).
+    It maps to ``use_outer_isab`` and ``num_outer_inducing_points``. Params
+    without the key are read as ``"isab16"``, the previously hard-coded
+    setting, so stored studies and checkpoints rebuild unchanged. Pin it
+    like any dimension, e.g.
+    ``CategoricalDimension("irt_matrix_outer_attention", constant="full")``.
+
     Fixed (not tuned):
 
     * ``num_outer_heads = 4``
     * ``outer_mlp_depth = 2``
     * ``outer_mlp_width = irt_matrix_outer_embed_dim * 2``
-    * ``use_outer_isab = True``, ``num_outer_inducing_points = 16``
 
     ``item_chunk_size``, ``person_chunk_size``, and ``gradient_checkpointing``
     are intentionally **not** search dimensions here: :func:`build` never sets
@@ -345,6 +365,11 @@ class MatrixIRTSummarySpace(BaseSearchSpace):
             "irt_matrix_outer_embed_dim", 32, 96, step=16
         )
     )
+    irt_matrix_outer_attention: CategoricalDimension = field(
+        default_factory=lambda: CategoricalDimension(
+            "irt_matrix_outer_attention", list(_OUTER_ATTENTION_MODES)
+        )
+    )
     #: Summary-network-wide dropout: maps to ``MatrixEquivariantIRTSummary``'s
     #: ``dropout``, which feeds the matrix blocks, the PMA pooling *and* the
     #: outer item stack. Not to be confused with the block-only
@@ -372,6 +397,9 @@ class MatrixIRTSummarySpace(BaseSearchSpace):
         )
         if params.get("irt_matrix_include_item_rest_correlation", False):
             raw_feature_channels = (*raw_feature_channels, "item_rest_correlation")
+        use_outer_isab, num_outer_inducing_points = _OUTER_ATTENTION_MODES[
+            params.get("irt_matrix_outer_attention", "isab16")
+        ]
         return MatrixEquivariantIRTSummary(
             embed_dim=int(params["irt_matrix_embed_dim"]),
             matrix_hidden_dim=int(params["irt_matrix_hidden_dim"]),
@@ -384,8 +412,8 @@ class MatrixIRTSummarySpace(BaseSearchSpace):
             outer_mlp_depth=2,
             outer_mlp_width=outer_embed * 2,
             num_outer_heads=4,
-            use_outer_isab=True,
-            num_outer_inducing_points=16,
+            use_outer_isab=use_outer_isab,
+            num_outer_inducing_points=num_outer_inducing_points,
             dropout=float(params["irt_matrix_dropout"]),
         )
 

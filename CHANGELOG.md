@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- HPO: new categorical search dimension `irt_matrix_outer_attention`
+  (`"isab16"`, `"isab32"`, `"full"`) on `MatrixIRTSummarySpace` makes the outer
+  item attention searchable (ISAB with 16 or 32 inducing points, or full
+  self-attention). Default `"isab16"` is the previously hard-coded setting:
+  params without the key rebuild unchanged. Pin it with
+  `CategoricalDimension("irt_matrix_outer_attention", constant=...)`.
 - HPO resume guard: `make_irt_hooks(...)` now builds a normalized validation
   manifest (`hooks.manifest`: parameters, metrics and directions, aggregation,
   joint-metric settings incl. `reference_id`/`resolution`, corners, per-corner
