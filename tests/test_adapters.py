@@ -1,5 +1,6 @@
 """Tests for bayesflow_irt.adapters."""
 
+import keras
 import numpy as np
 import pytest
 
@@ -21,6 +22,11 @@ from bayesflow_irt.simulators import (
     make_gpcm_simulator,
     make_pcm_simulator,
 )
+
+
+def _np32(x):
+    """Adapter outputs are NumPy on BayesFlow 2.0.x and backend tensors on 2.1."""
+    return np.asarray(keras.ops.convert_to_numpy(x), dtype=np.float32)
 
 # Standard test priors — must be specified explicitly at every call site.
 _PRIOR_A = Prior("lognormal", loc=0, scale=0.5)
@@ -151,7 +157,7 @@ class TestMake2PLAdapter:
         adapter = make_2pl_adapter(sim)
         out = adapter(raw)
         for v in out.values():
-            assert v.dtype == np.float32
+            assert str(v.dtype).endswith("float32")
 
     def test_log_transform_a_applied(self):
         """Standard mode: first column is log(a), second column is b."""
@@ -218,7 +224,7 @@ class TestMake1PLAdapter:
         adapter = make_1pl_adapter(sim)
         out = adapter(raw)
         for v in out.values():
-            assert v.dtype == np.float32
+            assert str(v.dtype).endswith("float32")
 
     def test_rejects_missing_simulator_attrs(self):
         """Adapter should reject objects without prior_b."""
@@ -270,7 +276,7 @@ class TestMake2PLAdapterLoading:
         adapter = make_2pl_adapter(sim, internal_parameterization="loading")
         out = adapter(raw)
         for v in out.values():
-            assert v.dtype == np.float32
+            assert str(v.dtype).endswith("float32")
 
     def test_internal_representation_differs_from_standard(self):
         """Loading and standard adapters must encode differently in iv."""
@@ -292,14 +298,14 @@ class TestMake2PLAdapterLoading:
         recovered = adapter(adapted, inverse=True)
 
         np.testing.assert_allclose(
-            recovered["a"].astype(np.float32),
+            _np32(recovered["a"]),
             raw["a"].astype(np.float32),
             rtol=1e-4,
             atol=1e-5,
             err_msg="Round-trip failed for 'a'",
         )
         np.testing.assert_allclose(
-            recovered["b"].astype(np.float32),
+            _np32(recovered["b"]),
             raw["b"].astype(np.float32),
             rtol=1e-4,
             atol=1e-5,
@@ -316,7 +322,7 @@ class TestMake2PLAdapterLoading:
         )
         recovered = adapter(adapter(raw), inverse=True)
         np.testing.assert_allclose(
-            recovered["b"].astype(np.float32),
+            _np32(recovered["b"]),
             raw["b"].astype(np.float32),
             rtol=1e-4,
             atol=1e-5,
@@ -460,7 +466,7 @@ class TestMakePCMAdapter:
         adapter = make_pcm_adapter(sim)
         out = adapter(raw)
         for v in out.values():
-            assert v.dtype == np.float32
+            assert str(v.dtype).endswith("float32")
 
     def test_one_hot_sums_to_one(self):
         """Each one-hot vector in summary_variables should sum to 1."""
@@ -610,7 +616,7 @@ class TestMakeGPCMAdapter:
         sim, raw = self._sim_and_sample()
         adapter = make_gpcm_adapter(sim)
         for v in adapter(raw).values():
-            assert v.dtype == np.float32
+            assert str(v.dtype).endswith("float32")
 
     def test_rejects_missing_simulator_attrs(self):
         with pytest.raises(TypeError, match="prior_a"):

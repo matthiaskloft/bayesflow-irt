@@ -97,6 +97,18 @@ def run(parent, output, **kwargs):
     )
 
 
+def _pin_seed_generators(network):
+    """Reset every seed generator of ``network`` to one fixed state.
+
+    BayesFlow 2.1 draws from several generators (not only the base
+    distribution's), so pinning one is no longer enough for equal draws.
+    """
+    from bayesflow_irt.approximators import _collect_seed_generators
+
+    for generator in _collect_seed_generators(network):
+        generator.state.assign([91, 0])
+
+
 @pytest.mark.parametrize(
     "override",
     [
@@ -161,11 +173,9 @@ def test_end_to_end(parent_checkpoint, tmp_path, monkeypatch, override):
     assert result.adaptation_seconds > 0
     assert result.item_inference_seconds > 0
     assert result.scoring_seconds > 0
-    loaded.inference_network.base_distribution.seed_generator.state.assign([91, 0])
+    _pin_seed_generators(loaded.inference_network)
     expected = PersonScorer(loaded).draw_item_posteriors(np.zeros((12, 4)), 5)
-    result.scorer.approximator.inference_network.base_distribution.seed_generator.state.assign(
-        [91, 0]
-    )
+    _pin_seed_generators(result.scorer.approximator.inference_network)
     actual = PersonScorer(result.scorer.approximator).draw_item_posteriors(
         np.zeros((12, 4)),
         5,

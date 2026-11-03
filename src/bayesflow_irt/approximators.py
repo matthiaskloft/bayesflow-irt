@@ -20,6 +20,7 @@ from bayesflow.adapters import Adapter
 from bayesflow.approximators.continuous_approximator import ContinuousApproximator
 from bayesflow.networks import InferenceNetwork
 
+from .adapters import _as_numpy
 from .draws_summary import DrawsSummary
 from .evaluation import CHUNK_SHRINK, MEMORY_SHARE, _drop_tracebacks, _torch_cuda
 from .utils import is_oom_error, safe_empty_cache
@@ -1102,6 +1103,10 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             inverse=True,
             strict=False,
         )
+        if isinstance(out, dict):
+            # BayesFlow >= 2.1 returns backend tensors from the inverse
+            # adapter; 2.0.x returned NumPy arrays. Keep NumPy as the API.
+            out = {k: _as_numpy(v) for k, v in out.items()}
 
         # 4. Derive loading-space key d = -a*b when applicable
         is_loading = (
@@ -1119,7 +1124,7 @@ class EquivariantIRTApproximator(ContinuousApproximator):
             out["d"] = -(np.asarray(out["a"]) * np.asarray(out["b"]))
 
         if split:
-            from bayesflow.utils.numpy_utils import split_arrays
+            from bayesflow.utils.dict_utils import split_arrays
 
             out = split_arrays(out, axis=-1)
 
