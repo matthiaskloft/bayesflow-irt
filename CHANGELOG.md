@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Added
 
 - HPO: new categorical search dimension `irt_matrix_outer_attention`
