@@ -746,11 +746,12 @@ def _build_validation_manifest(
     """Assemble the normalized manifest; see :func:`check_validation_manifest`."""
     names = list(dict.fromkeys([*metrics, *joint_metric_fns]))
     # Aggregation reduces by the direction of the keys a metric emits, which
-    # can differ from its registered name, so pin the declared output keys
-    # too. Keys known only after a metric has run cannot be pinned here.
+    # can differ from its registered name (e.g. coverage -> coverage_90), so
+    # pin the declared output keys of marginal and joint metrics too. Keys
+    # known only after a metric has run cannot be pinned here.
     direction_keys = list(
         dict.fromkeys(
-            [*names, *(k for n in joint_metric_fns for k in output_keys_for(n))]
+            [*names, *(k for n in names for k in output_keys_for(n))]
         )
     )
     directions: dict[str, str | None] = {}

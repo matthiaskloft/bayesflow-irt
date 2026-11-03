@@ -216,3 +216,8 @@ class TestTrainFnGuard:
 
     def test_callbacks_without_a_trial_skip_the_guard(self):
         hpo_mod._guard_from_callbacks([SimpleNamespace()], _hooks().manifest, False)
+
+
+def test_marginal_metric_output_key_directions_are_recorded():
+    hooks = _hooks(metrics=["coverage"])
+    assert "coverage_90" in hooks.manifest["scoring"]["metric_directions"]
