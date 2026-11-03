@@ -23,6 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- `WarmupCosine` now ships in the installed package
+  (`bayesflow_irt.schedules`, also exported from the package root). It used to
+  live only in `scripts/train_irt.py`, so a fresh process could not load a
+  compiled checkpoint (`load_model(..., compile=True)` raised "Could not
+  locate class 'WarmupCosine'"). The registered name is unchanged
+  (`bayesflow_irt_scripts>WarmupCosine`), so existing checkpoints load without
+  `custom_objects`.
 - `fit_with_oom_retry`: after a CUDA OOM following a completed epoch the
   optimizer step counter was rewound while the weights and Adam moment slots
   kept the failed partial epoch's updates, skewing Adam bias correction and

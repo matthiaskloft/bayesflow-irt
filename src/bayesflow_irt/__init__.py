@@ -86,6 +86,7 @@ from .sbc import (
     sample_random_theta_sbc_conditions,
     summarize_edge_parameter_diagnostics,
 )
+from .schedules import WarmupCosine
 from .scoring import PersonScore, PersonScorer
 from .simulators import (
     build_simulator,
@@ -112,6 +113,7 @@ from .utils import (
 )
 
 __all__ = [
+    "WarmupCosine",
     "AdaptationResult",
     "adapt_and_fit",
     "MatrixEquivariantIRTSummary",
