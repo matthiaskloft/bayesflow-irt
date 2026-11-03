@@ -1662,11 +1662,13 @@ def fit_with_oom_retry(
     matrix-summary models without person chunking, where memory relief typically
     came only from ``gradient_checkpointing`` and from flow/batch controls.
 
-    **LR schedule sync:** after each OOM, ``optimizer.iterations`` is reset to
-    ``epochs_done × num_batches``.  Without this, ``CosineDecay`` (and any
-    schedule that reads ``optimizer.iterations``) would see artificially high
-    step counts caused by partial epochs that OOM'd, decaying the LR faster
-    than the actual training progress justifies.
+    **Optimizer counter:** after an OOM, every applied update is retained,
+    including those of a failed partial epoch (retained partial progress).
+    ``optimizer.iterations`` is never rewound, so it stays consistent with
+    the weights and Adam moment slots (Keras Adam derives its bias correction
+    from the counter).  Schedules that read ``optimizer.iterations`` see the
+    updates actually applied.  The number of epochs still to run is tracked
+    separately from the counter.
 
     Parameters
     ----------
@@ -1894,25 +1896,6 @@ def fit_with_oom_retry(
     # or KeyboardInterrupt) so FitResult.history always covers every epoch
     # actually trained, in order.
     history_so_far: dict[str, list[Any]] = {}
-    # optimizer.apply() calls completed across all attempts. NOT simply
-    # epochs_done * num_batches once gradient_accumulation_steps
-    # compensation (below) is active: EquivariantIRTApproximator.train_step
-    # calls optimizer.apply() once per accumulation window, i.e.
-    # num_batches // gradient_accumulation_steps times per epoch, not once
-    # per batch. Tracked using whichever gradient_accumulation_steps was
-    # actually active on the approximator during each attempt's completed
-    # epochs (read at the moment those epochs are counted, before any later
-    # step-down changes it), since compensation can raise it partway
-    # through a retry sequence.
-    completed_optimizer_steps = 0
-    # optimizer.iterations on entry: a model that was trained or restored
-    # before this call already carries optimizer steps, and the schedule resync
-    # below must restore baseline + completed steps, not completed steps alone.
-    try:
-        baseline_iterations = int(approximator.optimizer.iterations)
-    except (RuntimeError, AttributeError, TypeError, ValueError):
-        baseline_iterations = 0
-
     while batch_size >= min_batch_size:
         # Build item-chunk ladder for this batch_size: [None, bs, bs//2, …, 8]
         if has_item_chunking:
@@ -2088,27 +2071,6 @@ def fit_with_oom_retry(
                                             values
                                         )
                                     epochs_done += n_this_attempt
-                                    if num_batches is not None:
-                                        # gradient_accumulation_steps active
-                                        # on the approximator right now is
-                                        # exactly what was active during the
-                                        # epochs this attempt just completed
-                                        # -- compensation (below) only ever
-                                        # changes it after this whole
-                                        # persistent-try loop has exited.
-                                        active_ga = max(
-                                            1,
-                                            int(
-                                                getattr(
-                                                    approximator,
-                                                    "gradient_accumulation_steps",
-                                                    1,
-                                                )
-                                            ),
-                                        )
-                                        completed_optimizer_steps += n_this_attempt * (
-                                            num_batches // active_ga
-                                        )
                                     logger.info(
                                         "OOM after %d epoch(s); %d / %d total "
                                         "epochs done.",
@@ -2120,44 +2082,11 @@ def fit_with_oom_retry(
                         gc.collect()
                         safe_empty_cache()
 
-                        # --- Sync LR schedule to actual progress ---
-                        # optimizer.iterations advances once per
-                        # optimizer.apply() call -- once per batch normally,
-                        # but once per gradient_accumulation_steps-sized
-                        # window when accumulation is active (see
-                        # EquivariantIRTApproximator.train_step) -- and is
-                        # never reset between fit() calls. If OOM fires
-                        # mid-epoch the counter overshoots: the next attempt
-                        # starts with a lower LR than the clean schedule would
-                        # give for the optimizer steps that actually
-                        # completed. Fix: clamp optimizer.iterations back to
-                        # baseline_iterations + completed_optimizer_steps, NOT
-                        # epochs_done * num_batches (that assumes
-                        # gradient_accumulation_steps == 1 throughout, which
-                        # no longer holds once step 3's compensation raises
-                        # it mid-retry). Only done when this attempt completed
-                        # an epoch: an OOM before the first completed epoch
-                        # keeps the weights and Adam slots of its partial
-                        # updates, so the counter (used for Adam's bias
-                        # correction as well as the schedule) must keep
-                        # them too.
-                        if num_batches is not None and n_this_attempt > 0:
-                            target_step = (
-                                baseline_iterations + completed_optimizer_steps
-                            )
-                            try:
-                                opt = approximator.optimizer
-                                if (
-                                    hasattr(opt, "iterations")
-                                    and opt.iterations is not None
-                                ):
-                                    opt.iterations.assign(target_step)
-                            except (RuntimeError, AttributeError, TypeError) as exc:
-                                logger.warning(
-                                    "Could not resync optimizer.iterations to %d: %s",
-                                    target_step,
-                                    exc,
-                                )
+                        # No optimizer rewind: updates of the failed partial
+                        # epoch stay in the weights and Adam slots, so
+                        # optimizer.iterations (Adam bias correction and LR
+                        # schedules) must keep counting them. Reporting
+                        # progress is tracked separately in epochs_done.
 
                         is_last_persistent_try = (
                             persistent_try == n_persistent_tries - 1
