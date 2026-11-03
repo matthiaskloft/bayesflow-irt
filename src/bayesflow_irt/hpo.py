@@ -40,6 +40,7 @@ Example
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import re
@@ -126,6 +127,7 @@ try:
     # Export requested in bayesflow-hpo#122; until that is answered, treat a
     # change here as a breaking change and pin accordingly.
     from bayesflow_hpo.validation.registry import (
+        JointMetricConfigurationError,
         JointMetricFn,
         JointMetricInputs,
         is_diagnostic_metric,
@@ -143,6 +145,7 @@ except ImportError as exc:
         ``bayesflow_hpo`` installed (see module docstring)."""
 
     BaseSearchSpace = _BaseSearchSpacePlaceholder
+    JointMetricConfigurationError = ValueError  # type: ignore[misc,assignment]
     CouplingFlowSpace = _BaseSearchSpacePlaceholder
     FlowMatchingSpace = _BaseSearchSpacePlaceholder
 else:
@@ -624,6 +627,312 @@ class FlowChoiceSpace:
 
 
 # ---------------------------------------------------------------------------
+# Validation manifest (resume guard)
+# ---------------------------------------------------------------------------
+
+#: Study user-attribute holding the validation manifest. Namespaced like
+#: ``bayesflow_hpo``'s own ``bayesflow_hpo_*`` attributes, which this guard
+#: complements: upstream pins its own validation pipeline's settings, but
+#: ``make_irt_hooks`` supplies a custom ``validate_fn`` that bypasses them.
+VALIDATION_MANIFEST_ATTR = "bayesflow_irt_validation_manifest"
+
+_MANIFEST_SCHEMA = 1
+
+#: Packages whose ``major.minor`` is recorded and compared. Patch releases
+#: are recorded but never fail a resume.
+_MANIFEST_VERSION_PACKAGES = ("bayesflow", "bayesflow_hpo", "bayesflow_irt")
+
+
+class ValidationManifestError(JointMetricConfigurationError):
+    """A study's stored validation manifest does not match the current one.
+
+    Subclasses ``bayesflow_hpo``'s ``JointMetricConfigurationError`` on
+    purpose: ``GenericObjective`` re-raises that class out of ``train_fn``
+    instead of converting it into a penalised trial, which is the only way a
+    study-level refusal can stop an ``optimize()`` run.
+    """
+
+
+def _normalize(obj: Any, path: str = "") -> Any:
+    """Return a JSON-serializable, deterministically ordered copy of *obj*.
+
+    Unknown types raise ``TypeError`` rather than being stringified: a
+    manifest entry that cannot be represented faithfully would compare equal
+    to anything with the same ``repr``.
+    """
+    if obj is None or isinstance(obj, (bool, str)):
+        return obj
+    if isinstance(obj, (int, np.integer)):
+        return int(obj)
+    if isinstance(obj, (float, np.floating)):
+        f = float(obj)
+        # JSON has no NaN/inf; spell them so they round-trip comparably.
+        return f if math.isfinite(f) else repr(f)
+    if isinstance(obj, Mapping):
+        return {
+            str(k): _normalize(v, f"{path}.{k}")
+            for k, v in sorted(obj.items(), key=lambda kv: str(kv[0]))
+        }
+    if isinstance(obj, (list, tuple)):
+        return [_normalize(v, f"{path}[{i}]") for i, v in enumerate(obj)]
+    if isinstance(obj, np.ndarray):
+        return _normalize(obj.tolist(), path)
+    raise TypeError(
+        f"Cannot record {type(obj).__name__} at manifest path {path!r}; "
+        "pass JSON-compatible values (numbers, strings, lists, mappings)."
+    )
+
+
+def _validation_data_digest(validation_data: Any) -> str:
+    """SHA-256 over the captured validation arrays (names, dtype, shape, bytes).
+
+    Covers everything the simulator, its priors, ``seed`` and the corners
+    contribute to the data the score is computed on, including changes to a
+    simulator that no configuration key names.
+    """
+    h = hashlib.sha256()
+    for sim in validation_data.simulations:
+        for key in sorted(sim):
+            arr = np.ascontiguousarray(np.asarray(sim[key]))
+            h.update(f"{key}|{arr.dtype.str}|{arr.shape}|".encode())
+            h.update(arr.tobytes())
+    return h.hexdigest()
+
+
+def _package_versions() -> dict[str, str | None]:
+    from importlib.metadata import PackageNotFoundError, version
+
+    out: dict[str, str | None] = {}
+    for name in _MANIFEST_VERSION_PACKAGES:
+        try:
+            out[name] = version(name.replace("_", "-"))
+        except PackageNotFoundError:
+            out[name] = None
+    return out
+
+
+def _major_minor(v: str | None) -> str | None:
+    if v is None:
+        return None
+    parts = re.findall(r"\d+", v)
+    return ".".join(parts[:2]) if parts else v
+
+
+def _flatten(obj: Any, prefix: str = "") -> dict[str, Any]:
+    if isinstance(obj, dict) and obj:
+        out: dict[str, Any] = {}
+        for k, v in obj.items():
+            out.update(_flatten(v, f"{prefix}.{k}" if prefix else k))
+        return out
+    return {prefix: obj}
+
+
+def _build_validation_manifest(
+    *,
+    simulator: Any,
+    param_keys: Sequence[str],
+    metrics: Sequence[str],
+    joint_metric_fns: Mapping[str, Any],
+    aggregate: Any,
+    corners: Sequence[tuple[int, int]],
+    corner_budget: Sequence[int],
+    seed: int,
+    validation_data: Any,
+    flows: Sequence[str],
+    flow_sample_kwargs: Mapping[str, Any],
+    summary_api: str,
+    extra: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Assemble the normalized manifest; see :func:`check_validation_manifest`."""
+    names = list(dict.fromkeys([*metrics, *joint_metric_fns]))
+    directions: dict[str, str | None] = {}
+    for name in names:
+        lower = _lower_is_better(name)
+        directions[name] = None if lower is None else ("min" if lower else "max")
+    joint: dict[str, Any] = {}
+    for name, fn in joint_metric_fns.items():
+        settings = getattr(fn, "joint_metric_settings", None)
+        if settings is None:
+            logger.warning(
+                "Joint metric %r records no joint_metric_settings; a resumed "
+                "study cannot detect a change in how it is configured. Pass "
+                "make_irt_hooks(manifest_extra=...) to pin it.",
+                name,
+            )
+        joint[name] = {
+            "callable": f"{getattr(fn, '__module__', '?')}."
+            f"{getattr(fn, '__qualname__', type(fn).__name__)}",
+            "settings": None if settings is None else dict(settings),
+        }
+    scoring = {
+        "simulator": type(simulator).__name__,
+        "param_keys": list(param_keys),
+        "metrics": names,
+        "metric_directions": directions,
+        "aggregate": aggregate,
+        "joint_metrics": joint,
+        "corners": [list(c) for c in corners],
+        "sims_per_corner": list(corner_budget),
+        "seed": seed,
+        "validation_data_sha256": _validation_data_digest(validation_data),
+        "flows": list(flows),
+        "flow_sample_kwargs": dict(flow_sample_kwargs),
+        "summary_api": summary_api,
+        "extra": dict(extra or {}),
+    }
+    return _normalize(
+        {
+            "schema": _MANIFEST_SCHEMA,
+            "scoring": scoring,
+            "versions": _package_versions(),
+        },
+        "manifest",
+    )
+
+
+def _manifest_differences(stored: Any, current: dict[str, Any]) -> list[str]:
+    """List the keys on which *stored* and *current* disagree (sorted)."""
+    if not isinstance(stored, dict):
+        return ["<stored manifest is not a mapping>"]
+    diffs: list[str] = []
+    if stored.get("schema") != current["schema"]:
+        diffs.append(
+            f"schema: stored {stored.get('schema')!r}, current {current['schema']!r}"
+        )
+    a = _flatten(stored.get("scoring", {}), "scoring")
+    b = _flatten(current["scoring"], "scoring")
+    for key in sorted(set(a) | set(b)):
+        va, vb = a.get(key, "<absent>"), b.get(key, "<absent>")
+        if va != vb:
+            diffs.append(f"{key}: stored {va!r}, current {vb!r}")
+    sv = stored.get("versions")
+    sv = sv if isinstance(sv, dict) else {}
+    for pkg, cur in current["versions"].items():
+        if _major_minor(sv.get(pkg)) != _major_minor(cur):
+            diffs.append(f"versions.{pkg}: stored {sv.get(pkg)!r}, current {cur!r}")
+    return diffs
+
+
+def check_validation_manifest(
+    study: Any,
+    manifest: dict[str, Any],
+    *,
+    allow_unversioned_study: bool = False,
+    exclude_trial_numbers: Sequence[int] = (),
+) -> str:
+    """Stamp *manifest* on a fresh study, or compare it on a resumed one.
+
+    ``make_irt_hooks`` supplies a custom ``validate_fn``, which bypasses the
+    resume guard ``bayesflow_hpo`` applies to its own validation pipeline. A
+    study resumed after the references, jitter, resolution, metrics,
+    aggregation, corners, budget or seed changed would mix incomparable
+    scores with nothing to stop it. This stores a normalized manifest in the
+    study's user attributes (:data:`VALIDATION_MANIFEST_ATTR`) and refuses a
+    mismatch.
+
+    Rules:
+
+    * No stored manifest and no finished (COMPLETE or PRUNED) trial: the
+      study is fresh; the manifest is stored.
+    * Stored manifest equal to *manifest*: accepted. Package versions are
+      compared at ``major.minor`` only, so a patch release does not block a
+      resume; a minor bump may change metric semantics and does.
+    * Stored manifest differing: :class:`ValidationManifestError` naming each
+      differing key. There is no override; start a new study.
+    * No stored manifest but finished trials (a study from before this
+      guard): :class:`ValidationManifestError`, because its trials cannot be
+      shown to share this configuration. With
+      ``allow_unversioned_study=True`` the current manifest is adopted and a
+      warning is logged; the caller asserts the old trials were scored the
+      same way.
+
+    Trials that failed before this check ran do not count as finished, since
+    they never produced a score.
+
+    Parameters
+    ----------
+    study : optuna.Study
+        The study being run or resumed.
+    manifest : dict
+        Output of ``make_irt_hooks(...).manifest``.
+    allow_unversioned_study : bool, default False
+        Adopt a study that has finished trials but no manifest.
+    exclude_trial_numbers : sequence of int
+        Trial numbers to ignore when deciding whether the study is fresh
+        (the trial currently running).
+
+    Returns
+    -------
+    str
+        ``"stamped"``, ``"matched"`` or ``"adopted"``.
+
+    Raises
+    ------
+    ValidationManifestError
+        On a mismatch, or an unversioned study without the override.
+    """
+    stored = study.user_attrs.get(VALIDATION_MANIFEST_ATTR)
+    if stored is None:
+        skip = set(exclude_trial_numbers)
+        finished = [
+            t
+            for t in study.get_trials(deepcopy=False)
+            if t.number not in skip and t.state.name in ("COMPLETE", "PRUNED")
+        ]
+        if finished and not allow_unversioned_study:
+            raise ValidationManifestError(
+                f"Study {study.study_name!r} has {len(finished)} finished "
+                "trial(s) but no stored validation manifest (created before "
+                "this guard existed), so its scores cannot be shown to be "
+                "comparable with the current configuration. Start a new "
+                "study, or pass make_irt_hooks(allow_unversioned_study=True) "
+                "if you assert the old trials used this exact configuration."
+            )
+        study.set_user_attr(VALIDATION_MANIFEST_ATTR, manifest)
+        if finished:
+            logger.warning(
+                "Adopted unversioned study %r (%d finished trials) under the "
+                "current validation manifest on the caller's assertion.",
+                study.study_name, len(finished),
+            )
+            return "adopted"
+        return "stamped"
+    diffs = _manifest_differences(stored, manifest)
+    if diffs:
+        raise ValidationManifestError(
+            f"Study {study.study_name!r} was created under a different "
+            "validation configuration; its stored scores are not comparable "
+            "with this run's. Start a new study (new study_name or "
+            "resume=False). Differences:\n  " + "\n  ".join(diffs)
+        )
+    return "matched"
+
+
+def _guard_from_callbacks(
+    callbacks: Sequence[Any],
+    manifest: dict[str, Any],
+    allow_unversioned_study: bool,
+) -> None:
+    """Run :func:`check_validation_manifest` against the running trial's study.
+
+    ``train_fn`` receives the Keras callbacks, and upstream's
+    ``OptunaReportCallback`` carries the live trial. Without one (a
+    ``check_pipeline`` dry run) there is no study to protect.
+    """
+    for cb in callbacks:
+        trial = getattr(cb, "trial", None)
+        study = getattr(trial, "study", None)
+        if study is not None:
+            check_validation_manifest(
+                study,
+                manifest,
+                allow_unversioned_study=allow_unversioned_study,
+                exclude_trial_numbers=[trial.number],
+            )
+            return
+
+
+# ---------------------------------------------------------------------------
 # Return type
 # ---------------------------------------------------------------------------
 
@@ -645,6 +954,10 @@ class IRTHooks(NamedTuple):
         ``validate_fn`` hook for ``optimize()``.  **Ignores** the
         ``validation_data`` argument passed by ``optimize()`` and uses
         the captured edge-corner dataset instead.
+    manifest : dict or None
+        Normalized validation manifest (see :func:`check_validation_manifest`).
+        ``train_fn`` stamps it on a fresh study and compares it on a resumed
+        one before the first trial trains.
     """
 
     search_space: CompositeSearchSpace
@@ -652,6 +965,7 @@ class IRTHooks(NamedTuple):
     build_fn: Callable
     train_fn: Callable
     validate_fn: Callable
+    manifest: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1976,6 +2290,16 @@ def make_classical_reference_provider(
             inputs.sim_batch[responses_key], param_keys, jitter=jitter, rng=rng
         )
 
+    # The closure's settings are invisible to a manifest otherwise. Pass this
+    # to ``make_irt_hooks(manifest_extra=...)`` so a resumed study notices a
+    # changed jitter or seed.
+    provider.reference_settings = {  # type: ignore[attr-defined]
+        "kind": "classical",
+        "param_keys": list(param_keys),
+        "responses_key": responses_key,
+        "jitter": float(jitter),
+        "seed": int(seed),
+    }
     return provider
 
 
@@ -1999,6 +2323,8 @@ def make_irt_hooks(
     validation_chunk_size: int | Literal["auto"] = "auto",
     run_pipeline_check: bool = False,
     flow: str | Sequence[str] = "coupling_flow",
+    manifest_extra: Mapping[str, Any] | None = None,
+    allow_unversioned_study: bool = False,
 ) -> IRTHooks:
     """Create HPO hooks for an IRT model.
 
@@ -2057,16 +2383,23 @@ def make_irt_hooks(
         parameter and ``a`` on the **log** scale -- see
         :data:`_JOINT_PARAM_TRANSFORMS` and :func:`_joint_row`.
 
-        .. warning::
-            **These hooks have no resume guard.** ``reference_id`` and the
-            rest of a joint metric's ``joint_metric_settings`` are pinned by
-            ``bayesflow_hpo`` only on its own validation pipeline;
-            ``_planned_joint_settings`` returns an empty mapping whenever a
-            custom ``validate_fn`` is supplied, which is exactly what this
-            factory produces. Changing the reference provider, the
-            ``reference_id``, the jitter or TARP's ``resolution`` between
-            runs of one study therefore mixes incomparable scores with
-            nothing to stop it. Start a new study when any of those change.
+        .. note::
+            **Resume guard.** ``bayesflow_hpo`` pins ``reference_id`` and the
+            rest of a joint metric's ``joint_metric_settings`` only on its own
+            validation pipeline, and this factory supplies a custom
+            ``validate_fn``. These hooks therefore keep their own guard: the
+            first trial's ``train_fn`` stores a validation manifest
+            (``hooks.manifest``) in the study's user attributes or, on a
+            resumed study, compares it and raises
+            :class:`ValidationManifestError` (naming each differing key)
+            before anything trains. A changed ``reference_id``, TARP
+            ``resolution``, metric, aggregation, corner, budget, seed or
+            simulator therefore requires a new study. A provider's jitter
+            and seed live in a closure the manifest cannot see: pass
+            ``manifest_extra={"reference": provider.reference_settings}``
+            (set by :func:`make_classical_reference_provider`) to pin them.
+            A study with finished trials but no manifest is refused unless
+            ``allow_unversioned_study=True``.
 
         Nothing joint runs unless asked for, so a study that does not ask
         scores exactly as without joint metrics,
@@ -2381,9 +2714,25 @@ def make_irt_hooks(
         to flow-matching trials only and must be unset for
         ``"coupling_flow"``, which has no integrator.
 
+    manifest_extra : mapping or None
+        JSON-compatible entries added to the validation manifest under
+        ``"extra"``, for configuration the factory cannot see (for example a
+        reference provider's ``reference_settings``).
+    allow_unversioned_study : bool, default False
+        Resume a study that has finished trials but no stored manifest
+        (created before the guard existed), adopting the current manifest.
+        You assert the old trials were scored under this exact configuration.
+
     Returns
     -------
     IRTHooks
+        ``.manifest`` holds the validation manifest the guard enforces.
+
+    Raises
+    ------
+    ValidationManifestError
+        Raised from ``train_fn`` (before training) when a resumed study's
+        stored manifest differs, or has none while holding finished trials.
     """
     _require_bayesflow_hpo()
     if validation_chunk_size != "auto" and (
@@ -2638,6 +2987,22 @@ def make_irt_hooks(
         seed=seed,
     )
 
+    manifest = _build_validation_manifest(
+        simulator=simulator,
+        param_keys=param_keys,
+        metrics=metrics,
+        joint_metric_fns=joint_metric_fns,
+        aggregate=aggregate,
+        corners=corners,
+        corner_budget=corner_budget,
+        seed=seed,
+        validation_data=validation_data,
+        flows=flows,
+        flow_sample_kwargs=flow_sample_kwargs,
+        summary_api=summary_api,
+        extra=manifest_extra,
+    )
+
     # --- search space ---
     if training_space is None:
         training_space = TrainingSpace()
@@ -2690,6 +3055,10 @@ def make_irt_hooks(
         hparams: dict[str, Any],
         callbacks: list[Any],
     ) -> None:
+        # Before any training: a study whose stored scores mean something
+        # else must stop here, not after a trial has been paid for.
+        _guard_from_callbacks(callbacks, manifest, allow_unversioned_study)
+
         # Each trial samples a different summary/flow architecture and draws
         # a different (n_items, n_persons) shape per batch, so PyTorch's CUDA
         # caching allocator sees many distinct tensor sizes across a search --
@@ -3219,6 +3588,7 @@ def make_irt_hooks(
         build_fn=_build_fn,
         train_fn=_train_fn,
         validate_fn=_validate_fn,
+        manifest=manifest,
     )
 
     if run_pipeline_check:

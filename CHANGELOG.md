@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- HPO resume guard: `make_irt_hooks(...)` now builds a normalized validation
+  manifest (`hooks.manifest`: parameters, metrics and directions, aggregation,
+  joint-metric settings incl. `reference_id`/`resolution`, corners, per-corner
+  budget, seed, a digest of the validation data, flows and sampling kwargs,
+  optional `manifest_extra`, package versions). The first trial stores it in
+  the Optuna study's user attributes; a resumed study is compared before any
+  training and a mismatch raises `ValidationManifestError` naming the
+  differing keys (start a new study). Versions compare at major.minor. A
+  study with finished trials but no manifest is refused unless
+  `allow_unversioned_study=True`. `make_classical_reference_provider` exposes
+  `.reference_settings` for `manifest_extra`. Previously the custom
+  `validate_fn` bypassed upstream's resume guard silently.
+
 ### Fixed
 
 - Model card: the item-posterior type was reported as "not recorded" for
