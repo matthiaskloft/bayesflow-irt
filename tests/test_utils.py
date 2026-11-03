@@ -2400,24 +2400,11 @@ class TestFitWithOomRetry:
         assert result.batch_size == 16
         assert approx.gradient_accumulation_steps == 1
 
-    def test_lr_resync_accounts_for_active_gradient_accumulation_steps(self):
-        """Once gradient_accumulation_steps compensation raises accumulation
-        above 1, optimizer.iterations advances once per accumulation window
-        (num_batches // gradient_accumulation_steps per epoch), not once per
-        batch (see EquivariantIRTApproximator.train_step). The LR resync
-        after a later OOM must clamp optimizer.iterations to the actual
-        number of completed optimizer.apply() calls, not
-        epochs_done * num_batches -- the latter would overshoot by a factor
-        of gradient_accumulation_steps and prematurely decay schedules like
-        CosineDecay.
-
-        Scenario: every attempt at batch_size=32 OOMs immediately (0
-        progress) until the persistent-try budget (default
-        n_persistent_tries=2) is exhausted, triggering a compensated
-        step-down to batch_size=16, gradient_accumulation_steps=2
-        (num_batches=4 is evenly divisible). The first attempt at the
-        compensated config completes exactly one epoch before OOMing again
-        -- a compensated retry completing an epoch before OOMing."""
+    def test_oom_does_not_rewind_counter_under_gradient_accumulation(self):
+        """After an OOM following a completed epoch, optimizer.iterations
+        keeps every applied update (including the failed partial epoch); it
+        is not rewound to a completed-epoch estimate, and the retry still
+        runs only the remaining epochs."""
 
         class _FakeIterations:
             def __init__(self):
@@ -2440,16 +2427,17 @@ class TestFitWithOomRetry:
                 self.optimizer = _FakeOptimizer()
                 self.history = None
                 self.call_count = 0
+                self.epochs_seen = []
 
-            def fit(self, *, batch_size, **kwargs):
+            def fit(self, *, batch_size, epochs, **kwargs):
                 self.call_count += 1
+                self.epochs_seen.append(epochs)
                 if batch_size == 32:
-                    # No progress at all at the original batch size.
                     raise RuntimeError("CUDA out of memory")
                 if batch_size == 16 and self.call_count == 3:
-                    # First attempt at the compensated config: completes one
-                    # epoch (with gradient_accumulation_steps=2 already
-                    # active) before OOMing again.
+                    # One completed epoch (2 updates) plus one update of the
+                    # failed partial epoch.
+                    self.optimizer.iterations.assign(3)
                     self.history = _FakeHistoryWithLosses([1.0])
                     raise RuntimeError("CUDA out of memory")
                 return _FakeHistory()
@@ -2465,20 +2453,16 @@ class TestFitWithOomRetry:
 
         assert result.batch_size == 16
         assert approx.gradient_accumulation_steps == 2
-        # 1 completed epoch * (num_batches=4 // gradient_accumulation_steps=2)
-        # = 2 optimizer.apply() calls -- NOT epochs_done * num_batches = 4,
-        # which a naive formula would assign.
-        assert approx.optimizer.iterations.value == 2
+        assert approx.optimizer.iterations.value == 3
+        assert approx.epochs_seen[-1] == 4
 
     @pytest.mark.parametrize("complete_epoch_first", [True, False])
-    def test_lr_resync_keeps_preexisting_optimizer_iterations(
+    def test_oom_keeps_preexisting_optimizer_iterations_monotonic(
         self, complete_epoch_first
     ):
-        """A model entering the retry loop with optimizer.iterations > 0 must
-        be resynced to that baseline plus the completed steps after an OOM
-        that follows a completed epoch. An OOM before any epoch completed
-        leaves the counter alone, because the weights and optimizer slots
-        keep that attempt's partial updates."""
+        """A model entering the retry loop with optimizer.iterations > 0
+        keeps the baseline plus every update applied before the OOM, whether
+        or not an epoch completed first (retained partial progress)."""
 
         class _FakeIterations:
             def __init__(self, value):
@@ -2509,7 +2493,6 @@ class TestFitWithOomRetry:
                 self.call_count += 1
                 self.seen_start.append(int(self.optimizer.iterations))
                 if self.call_count == 1:
-                    # Partial progress inside the failed attempt.
                     self.optimizer.iterations.assign(int(self.optimizer.iterations) + 3)
                     if complete_epoch_first:
                         self.history = _FakeHistoryWithLosses([1.0])
@@ -2525,8 +2508,7 @@ class TestFitWithOomRetry:
             fit_kwargs=dict(epochs=5, num_batches=4),
         )
 
-        expected = 104 if complete_epoch_first else 103
-        assert approx.seen_start == [100, expected]
+        assert approx.seen_start == [100, 103]
 
     def test_oom_before_first_epoch_keeps_adam_step_consistent(self):
         """With a real Adam, an OOM before any completed epoch must not
@@ -2568,6 +2550,65 @@ class TestFitWithOomRetry:
         )
 
         assert int(opt.iterations) == 4
+        np.testing.assert_allclose(
+            keras.ops.convert_to_numpy(var),
+            keras.ops.convert_to_numpy(ref_var),
+            rtol=1e-6,
+        )
+
+    def test_oom_after_completed_epoch_keeps_adam_step_consistent(self):
+        """With a real Adam, an OOM after a completed epoch must keep the
+        counter monotonic: the failed partial epoch's updates stay in the
+        weights and moment slots, so the final counter equals the number of
+        updates applied and the weights match an uninterrupted run."""
+
+        def make():
+            var = keras.Variable(np.zeros((1,), dtype="float32"))
+            opt = keras.optimizers.Adam(learning_rate=0.001)
+            opt.build([var])
+            return var, opt
+
+        ref_var, ref_opt = make()
+        for _ in range(7):
+            ref_opt.apply([keras.ops.ones((1,))], [ref_var])
+
+        var, opt = make()
+
+        class _HistoryWithLosses:
+            def __init__(self, losses):
+                self.history = {"loss": list(losses)}
+
+        class FakeApprox:
+            def __init__(self):
+                self.optimizer = opt
+                self.history = None
+                self.call_count = 0
+                self.epochs_seen = []
+
+            def fit(self, *, batch_size, epochs, **kwargs):
+                self.call_count += 1
+                self.epochs_seen.append(epochs)
+                if self.call_count == 1:
+                    # One completed 4-batch epoch, then 2 updates of the
+                    # failed partial epoch.
+                    for _ in range(6):
+                        opt.apply([keras.ops.ones((1,))], [var])
+                    self.history = _HistoryWithLosses([1.0])
+                    raise RuntimeError("CUDA out of memory")
+                opt.apply([keras.ops.ones((1,))], [var])
+                return _FakeHistory()
+
+        approx = FakeApprox()
+        fit_with_oom_retry(
+            approx,
+            None,
+            start_batch_size=32,
+            min_batch_size=8,
+            fit_kwargs=dict(epochs=2, num_batches=4),
+        )
+
+        assert approx.epochs_seen == [2, 1]
+        assert int(opt.iterations) == 7
         np.testing.assert_allclose(
             keras.ops.convert_to_numpy(var),
             keras.ops.convert_to_numpy(ref_var),
