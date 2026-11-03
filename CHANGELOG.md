@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- `WarmupCosine` now ships in the installed package
+  (`bayesflow_irt.schedules`, also exported from the package root). It used to
+  live only in `scripts/train_irt.py`, so a fresh process could not load a
+  compiled checkpoint (`load_model(..., compile=True)` raised "Could not
+  locate class 'WarmupCosine'"). The registered name is unchanged
+  (`bayesflow_irt_scripts>WarmupCosine`), so existing checkpoints load without
+  `custom_objects`.
+
+### Fixed
+
 - Model card: the item-posterior type was reported as "not recorded" for
   models whose hyperparameters arrive flat (e.g. from HPO trials), because the
   metadata tracker filed `item_posterior` under `training` while the card read

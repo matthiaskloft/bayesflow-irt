@@ -74,49 +74,10 @@ from bayesflow_irt import (  # noqa: E402
     probe_memory_config,
 )
 from bayesflow_irt.metadata import _sanitize_for_json  # noqa: E402
+from bayesflow_irt.schedules import WarmupCosine  # noqa: E402
 from bayesflow_irt.simulators import describe_size_sampling  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-# --------------------------------------------------------------------------
-# Learning-rate schedule
-# --------------------------------------------------------------------------
-# Defined at a stable, importable module path. A checkpoint serializes its
-# LR schedule by registered name, so a notebook-local definition cannot be
-# deserialized from a fresh kernel without ``compile=False``; keeping it here
-# lets ``keras.saving.load_model`` restore a compiled, further-trainable model
-# via ``custom_objects={"WarmupCosine": WarmupCosine}``.
-@keras.saving.register_keras_serializable(package="bayesflow_irt_scripts")
-class WarmupCosine(keras.optimizers.schedules.LearningRateSchedule):
-    """Linear warmup over ``warmup_steps``, then cosine decay."""
-
-    def __init__(self, warmup_steps: int, base_lr: float, cosine: Any) -> None:
-        super().__init__()
-        self.warmup_steps = warmup_steps
-        self.base_lr = base_lr
-        self.cosine = cosine
-
-    def __call__(self, step):
-        step = keras.ops.cast(step, "float32")
-        warmup_steps = keras.ops.cast(self.warmup_steps, "float32")
-        warmup_lr = self.base_lr * step / keras.ops.maximum(warmup_steps, 1.0)
-        return keras.ops.where(
-            step < warmup_steps, warmup_lr, self.cosine(step - warmup_steps)
-        )
-
-    def get_config(self) -> dict[str, Any]:
-        return {
-            "warmup_steps": self.warmup_steps,
-            "base_lr": self.base_lr,
-            "cosine": keras.saving.serialize_keras_object(self.cosine),
-        }
-
-    @classmethod
-    def from_config(cls, config: dict[str, Any]) -> WarmupCosine:
-        config = dict(config)
-        config["cosine"] = keras.saving.deserialize_keras_object(config["cosine"])
-        return cls(**config)
 
 
 # --------------------------------------------------------------------------
