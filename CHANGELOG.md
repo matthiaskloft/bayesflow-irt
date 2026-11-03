@@ -15,9 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   locate class 'WarmupCosine'"). The registered name is unchanged
   (`bayesflow_irt_scripts>WarmupCosine`), so existing checkpoints load without
   `custom_objects`.
-
-### Fixed
-
+- `fit_with_oom_retry`: after a CUDA OOM following a completed epoch the
+  optimizer step counter was rewound while the weights and Adam moment slots
+  kept the failed partial epoch's updates, skewing Adam bias correction and
+  LR schedules. Every applied update is now retained as partial progress and
+  `optimizer.iterations` stays monotonic; remaining epochs are tracked
+  separately.
 - Model card: the item-posterior type was reported as "not recorded" for
   models whose hyperparameters arrive flat (e.g. from HPO trials), because the
   metadata tracker filed `item_posterior` under `training` while the card read
