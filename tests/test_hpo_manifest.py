@@ -186,5 +186,33 @@ class TestTrainFnGuard:
         with pytest.raises(Err(), match="scoring.seed"):
             _hooks(seed=99).train_fn(None, None, {}, [SimpleNamespace(trial=trial2)])
 
+    def test_manifest_overwritten_during_training_refuses(self, monkeypatch):
+        # Two workers stamping a fresh study at once: the later write wins
+        # while this worker trains, so it must refuse before being scored.
+        study = _study()
+        hooks = _hooks()
+        other = _hooks(seed=99).manifest
+
+        def fake_fit(*args, **kwargs):
+            study.set_user_attr(VALIDATION_MANIFEST_ATTR, other)
+            return SimpleNamespace(attempts=1)
+
+        monkeypatch.setattr(hpo_mod, "fit_with_oom_retry", fake_fit)
+        trial = study.ask()
+        with pytest.raises(Err(), match="scoring.seed"):
+            hooks.train_fn(
+                SimpleNamespace(),
+                None,
+                {"epochs": 1, "num_batches": 1},
+                [SimpleNamespace(trial=trial)],
+            )
+
+    def test_declared_output_key_directions_are_recorded(self, monkeypatch):
+        monkeypatch.setattr(
+            hpo_mod, "output_keys_for", lambda name: [f"{name}_out"]
+        )
+        hooks = _hooks(joint_metrics={"jm": lambda inputs: {}})
+        assert "jm_out" in hooks.manifest["scoring"]["metric_directions"]
+
     def test_callbacks_without_a_trial_skip_the_guard(self):
         hpo_mod._guard_from_callbacks([SimpleNamespace()], _hooks().manifest, False)

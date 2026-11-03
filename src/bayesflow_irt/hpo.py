@@ -745,8 +745,16 @@ def _build_validation_manifest(
 ) -> dict[str, Any]:
     """Assemble the normalized manifest; see :func:`check_validation_manifest`."""
     names = list(dict.fromkeys([*metrics, *joint_metric_fns]))
+    # Aggregation reduces by the direction of the keys a metric emits, which
+    # can differ from its registered name, so pin the declared output keys
+    # too. Keys known only after a metric has run cannot be pinned here.
+    direction_keys = list(
+        dict.fromkeys(
+            [*names, *(k for n in joint_metric_fns for k in output_keys_for(n))]
+        )
+    )
     directions: dict[str, str | None] = {}
-    for name in names:
+    for name in direction_keys:
         lower = _lower_is_better(name)
         directions[name] = None if lower is None else ("min" if lower else "max")
     joint: dict[str, Any] = {}
@@ -3117,6 +3125,11 @@ def make_irt_hooks(
                 result.item_chunk_size,
                 result.person_chunk_size,
             )
+
+        # Optuna storage has no compare-and-set, so two workers starting a
+        # fresh study can both stamp, the later write winning. Re-check
+        # before the trial is scored: the overwritten worker refuses here.
+        _guard_from_callbacks(callbacks, manifest, allow_unversioned_study)
 
     # Chunk size per model and corner, chosen on the model's first validation.
     _probed_chunks: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
