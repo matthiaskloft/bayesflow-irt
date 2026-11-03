@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   self-attention). Default `"isab16"` is the previously hard-coded setting:
   params without the key rebuild unchanged. Pin it with
   `CategoricalDimension("irt_matrix_outer_attention", constant=...)`.
+  Trials of studies started before this change have no value for it and ran
+  with `"isab16"`; read a missing value as `"isab16"` when comparing modes.
+  Seeded reruns of a study may propose different values than before, since
+  the new dimension is sampled among the others.
 - HPO resume guard: `make_irt_hooks(...)` now builds a normalized validation
   manifest (`hooks.manifest`: parameters, metrics and directions, aggregation,
   joint-metric settings incl. `reference_id`/`resolution`, corners, per-corner

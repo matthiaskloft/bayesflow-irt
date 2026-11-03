@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import bayesflow as bf
+import keras
 import numpy as np
 import pytest
 
@@ -166,6 +167,20 @@ class TestMatrixIRTSummarySpace:
         cfg = net.get_config()
         assert cfg["use_outer_isab"] is isab
         assert cfg["num_outer_inducing_points"] == points
+
+    def test_outer_attention_unknown_value_raises(self):
+        params = {**self.BASE_PARAMS, "irt_matrix_outer_attention": "isab64"}
+        with pytest.raises(ValueError, match="irt_matrix_outer_attention"):
+            MatrixIRTSummarySpace().build(params)
+
+    @pytest.mark.parametrize("value", ["isab16", "full"])
+    def test_outer_attention_forward_pass(self, value):
+        params = {**self.BASE_PARAMS, "irt_matrix_outer_attention": value}
+        net = MatrixIRTSummarySpace().build(params)
+        x = np.random.default_rng(0).integers(0, 2, (2, 12, 5)).astype("float32")
+        out = keras.ops.convert_to_numpy(net(x))
+        assert out.shape[0] == 2
+        assert np.all(np.isfinite(out))
 
     def test_outer_attention_is_searchable_and_recorded(self):
         optuna = pytest.importorskip("optuna")

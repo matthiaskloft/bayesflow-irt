@@ -397,8 +397,14 @@ class MatrixIRTSummarySpace(BaseSearchSpace):
         )
         if params.get("irt_matrix_include_item_rest_correlation", False):
             raw_feature_channels = (*raw_feature_channels, "item_rest_correlation")
+        outer_attention = params.get("irt_matrix_outer_attention", "isab16")
+        if outer_attention not in _OUTER_ATTENTION_MODES:
+            raise ValueError(
+                f"irt_matrix_outer_attention must be one of "
+                f"{list(_OUTER_ATTENTION_MODES)}, got {outer_attention!r}."
+            )
         use_outer_isab, num_outer_inducing_points = _OUTER_ATTENTION_MODES[
-            params.get("irt_matrix_outer_attention", "isab16")
+            outer_attention
         ]
         return MatrixEquivariantIRTSummary(
             embed_dim=int(params["irt_matrix_embed_dim"]),
