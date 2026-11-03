@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import bayesflow as bf
+import keras
 import numpy as np
 import pytest
 
@@ -139,6 +140,75 @@ class TestMatrixIRTSummarySpace:
         assert isinstance(net, MatrixEquivariantIRTSummary)
         assert net.person_pooling == "mean_pma"
         assert net.num_pma_seeds == 2
+
+    BASE_PARAMS = {
+        "irt_matrix_hidden_dim": 16,
+        "irt_matrix_num_blocks": 1,
+        "irt_matrix_person_pooling": "mean",
+        "irt_matrix_num_outer_sabs": 1,
+        "irt_matrix_outer_embed_dim": 32,
+        "irt_matrix_dropout": 0.0,
+        "irt_matrix_embed_dim": 16,
+    }
+
+    def test_outer_attention_default_is_isab16(self):
+        net = MatrixIRTSummarySpace().build(dict(self.BASE_PARAMS))
+        cfg = net.get_config()
+        assert cfg["use_outer_isab"] is True
+        assert cfg["num_outer_inducing_points"] == 16
+
+    @pytest.mark.parametrize(
+        ("value", "isab", "points"),
+        [("isab16", True, 16), ("isab32", True, 32), ("full", False, 16)],
+    )
+    def test_outer_attention_mapping(self, value, isab, points):
+        params = {**self.BASE_PARAMS, "irt_matrix_outer_attention": value}
+        net = MatrixIRTSummarySpace().build(params)
+        cfg = net.get_config()
+        assert cfg["use_outer_isab"] is isab
+        assert cfg["num_outer_inducing_points"] == points
+
+    def test_outer_attention_unknown_value_raises(self):
+        params = {**self.BASE_PARAMS, "irt_matrix_outer_attention": "isab64"}
+        with pytest.raises(ValueError, match="irt_matrix_outer_attention"):
+            MatrixIRTSummarySpace().build(params)
+
+    @pytest.mark.parametrize("value", ["isab16", "full"])
+    def test_outer_attention_forward_pass(self, value):
+        params = {**self.BASE_PARAMS, "irt_matrix_outer_attention": value}
+        net = MatrixIRTSummarySpace().build(params)
+        x = np.random.default_rng(0).integers(0, 2, (2, 12, 5)).astype("float32")
+        out = keras.ops.convert_to_numpy(net(x))
+        assert out.shape[0] == 2
+        assert np.all(np.isfinite(out))
+
+    def test_outer_attention_is_searchable_and_recorded(self):
+        optuna = pytest.importorskip("optuna")
+        space = MatrixIRTSummarySpace()
+        dim = next(
+            d for d in space.dimensions if d.name == "irt_matrix_outer_attention"
+        )
+        assert list(dim.choices) == ["isab16", "isab32", "full"]
+        study = optuna.create_study()
+        study.optimize(lambda t: (space.sample(t), 0.0)[1], n_trials=1)
+        assert study.trials[0].params["irt_matrix_outer_attention"] in dim.choices
+
+    def test_outer_attention_can_be_pinned(self):
+        optuna = pytest.importorskip("optuna")
+        from bayesflow_hpo.search_spaces.base import CategoricalDimension
+
+        space = MatrixIRTSummarySpace(
+            irt_matrix_outer_attention=CategoricalDimension(
+                "irt_matrix_outer_attention", constant="full"
+            )
+        )
+        seen: list[dict] = []
+        study = optuna.create_study()
+        study.optimize(
+            lambda t: (seen.append(space.sample(t)), 0.0)[1], n_trials=1
+        )
+        assert seen[0]["irt_matrix_outer_attention"] == "full"
+        assert space.build(seen[0]).get_config()["use_outer_isab"] is False
 
     def test_dimensions_prefixed(self):
         space = MatrixIRTSummarySpace()
