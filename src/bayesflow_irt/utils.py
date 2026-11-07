@@ -32,6 +32,10 @@ def is_oom_error(exc: BaseException) -> bool:
     whose message text this package doesn't special-case, so the exception
     type is checked first per active backend, with message-substring
     matching only as a fallback for that backend's known message shapes.
+
+    On PyTorch, ``RuntimeError("CUDA driver error: device not ready")`` also
+    counts, but only when ``PYTORCH_CUDA_ALLOC_CONF`` enables
+    ``expandable_segments`` (the environment-dependent case from issue #42).
     """
     backend = keras.backend.backend()
 
@@ -61,9 +65,31 @@ def is_oom_error(exc: BaseException) -> bool:
         # SystemError in general, which can also indicate an unrelated
         # interpreter-level bug) so this doesn't mask genuine defects as
         # retriable OOMs.
-        return isinstance(exc, SystemError) and (
+        if isinstance(exc, SystemError) and (
             "error return without exception set" in msg
-        )
+        ):
+            return True
+        # With ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`` (seen on
+        # WSL2), exhausted device memory can surface as a bare
+        # ``RuntimeError: CUDA driver error: device not ready`` instead of a
+        # typed OOM (issue #42). Treated as retriable only when that allocator
+        # setting is active, since the same message can otherwise indicate a
+        # genuine driver/async-execution problem.
+        if not (
+            isinstance(exc, RuntimeError)
+            and "cuda driver error: device not ready" in msg
+        ):
+            return False
+        options = {
+            key.strip(): value.strip()
+            for key, _, value in (
+                item.partition(":")
+                for item in os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "")
+                .lower()
+                .split(",")
+            )
+        }
+        return options.get("expandable_segments") == "true"
 
     if backend == "tensorflow":
         import tensorflow as tf
