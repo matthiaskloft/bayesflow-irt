@@ -513,8 +513,6 @@ def _build_tiny_2pl_approximator():
         num_outer_sabs=1,
         outer_embed_dim=8,
         num_outer_heads=2,
-        outer_mlp_depth=1,
-        outer_mlp_width=16,
         dropout=0.0,
     )
     flow = bf.networks.FlowMatching(
@@ -538,8 +536,6 @@ def test_matrix_summary_model_save_load_round_trip(tmp_path) -> None:
         num_outer_sabs=1,
         outer_embed_dim=8,
         num_outer_heads=2,
-        outer_mlp_depth=1,
-        outer_mlp_width=16,
         dropout=0.0,
     )
     inputs = keras.Input(shape=(6, 4), dtype="float32")
@@ -622,8 +618,6 @@ def test_matrix_summary_loads_without_custom_objects(tmp_path) -> None:
         num_outer_sabs=1,
         outer_embed_dim=8,
         num_outer_heads=2,
-        outer_mlp_depth=1,
-        outer_mlp_width=16,
         dropout=0.0,
     )
     inputs = keras.Input(shape=(6, 4), dtype="float32")
@@ -692,7 +686,6 @@ def test_gradient_accumulation_resets_at_epoch_boundary_in_real_fit() -> None:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=8,
-            outer_mlp_width=16,
         ),
         gradient_accumulation_steps=3,
     )

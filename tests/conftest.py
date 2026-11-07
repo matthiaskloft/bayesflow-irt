@@ -82,7 +82,6 @@ def trained_1pl_approximator():
         num_matrix_blocks=1,
         num_outer_sabs=1,
         outer_embed_dim=16,
-        outer_mlp_width=32,
     )
     inference_net = bf.networks.FlowMatching(
         subnet_kwargs={"widths": (32, 32)},

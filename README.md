@@ -3,7 +3,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/matthiaskloft/bayesflow-irt)](https://github.com/matthiaskloft/bayesflow-irt/releases/latest)
 [![PyPI version](https://img.shields.io/pypi/v/bayesflow-irt)](https://pypi.org/project/bayesflow-irt/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 
 > [!NOTE]
 > All 0.x.x releases are under active development and may introduce breaking
@@ -34,6 +34,9 @@ git clone https://github.com/matthiaskloft/bayesflow-irt.git
 cd bayesflow-irt
 pip install -e ".[torch]"
 ```
+
+Requires BayesFlow 2.1 or later (installed automatically). BayesFlow 2.0.x is
+not supported, and checkpoints trained on it do not load.
 
 Extras: `dev` (tests), `examples` (plotting and Jupyter), `card` (model-card
 plots), `hpo` (`bayesflow-hpo`, from PyPI), and `numba` (faster response

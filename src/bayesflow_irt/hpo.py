@@ -309,8 +309,6 @@ class MatrixIRTSummarySpace(BaseSearchSpace):
     Fixed (not tuned):
 
     * ``num_outer_heads = 4``
-    * ``outer_mlp_depth = 2``
-    * ``outer_mlp_width = irt_matrix_outer_embed_dim * 2``
 
     ``item_chunk_size``, ``person_chunk_size``, and ``gradient_checkpointing``
     are intentionally **not** search dimensions here: :func:`build` never sets
@@ -415,8 +413,6 @@ class MatrixIRTSummarySpace(BaseSearchSpace):
             raw_feature_channels=raw_feature_channels,
             num_outer_sabs=int(params["irt_matrix_num_outer_sabs"]),
             outer_embed_dim=outer_embed,
-            outer_mlp_depth=2,
-            outer_mlp_width=outer_embed * 2,
             num_outer_heads=4,
             use_outer_isab=use_outer_isab,
             num_outer_inducing_points=num_outer_inducing_points,

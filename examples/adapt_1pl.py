@@ -1,7 +1,8 @@
 """Small fine-tune → save → fit example, with synthetic observed responses.
 
 Set KERAS_BACKEND=torch before running. Supply a pretrained 1PL .keras file
-and its metadata sidecar. For example:
+and its metadata sidecar, trained with BayesFlow 2.1 (2.0.x checkpoints do not
+load). For example:
 
     python examples/adapt_1pl.py parent.keras parent_metadata.json adapted_run
 
