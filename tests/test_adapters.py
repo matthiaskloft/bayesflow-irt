@@ -25,7 +25,7 @@ from bayesflow_irt.simulators import (
 
 
 def _np32(x):
-    """Adapter outputs are NumPy on BayesFlow 2.0.x and backend tensors on 2.1."""
+    """Adapter outputs are backend tensors on BayesFlow 2.1."""
     return np.asarray(keras.ops.convert_to_numpy(x), dtype=np.float32)
 
 # Standard test priors — must be specified explicitly at every call site.

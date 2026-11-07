@@ -21,7 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   Python 3.11 support dropped.
 - `Adapter.add_transform` (removed in 2.1) replaced by `Adapter.append`;
   custom adapter transforms accept backend tensors;
-  `EquivariantIRTApproximator.sample` still returns NumPy arrays.
+  `EquivariantIRTApproximator.sample` still returns NumPy arrays. Direct
+  `Adapter` calls (forward or `inverse=True`) now return backend tensors
+  (BayesFlow 2.1 behaviour); use `keras.ops.convert_to_numpy`.
 
 ### Removed
 

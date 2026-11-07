@@ -124,8 +124,8 @@ Compared `coupling_flow/` (2.0.8) with `inference/coupling/` (2.1.0):
   (single_coupling.py:19-26) is widths (128,128), `hard_silu`,
   `glorot_uniform`, no residual, dropout 0.05. 2.1.0 `defaults.py`
   `COUPLING_MLP_DEFAULTS` is identical except `kernel_initializer="orthogonal"`
-  (merged at `single_coupling.py:53`). The MLP's `spectral_normalization`
-  option no longer exists.
+  (merged at `single_coupling.py:53`); the 2.0.8 `spectral_normalization`
+  option is replaced by `norm=None`.
 - Output projector is still zero-initialized.
 
 Effect: same capacity, different initialization, so different seeded
