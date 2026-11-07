@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Removed
+
+- `load_weights_compat` (also exported from `bayesflow_irt`) and the
+  `compat.py` attention-rename machinery for BayesFlow 2.0.8 vs 2.0.10
+  checkpoints. It could not load 2.0.x files on 2.1 and 2.1 needs no key
+  renaming. `weights_digest` and the size-moment helpers remain.
+
 ### Changed
 
 - **BREAKING:** requires `bayesflow>=2.1.0`; BayesFlow 2.0.x is no longer

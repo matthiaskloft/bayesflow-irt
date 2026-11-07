@@ -103,10 +103,11 @@ skip projector only if widths differ. Output shape
 `(batch, num_seeds * embed_dim)` is unchanged. `build` needs a concrete shape;
 the package's eager build of `person_pma` still applies.
 
-`compat.py` (rename shim for `*_block` vs unsuffixed layer names) addressed
-2.0.8 vs 2.0.10 key names. It cannot make a 2.0.x checkpoint load on 2.1,
-because the variable sets differ. It stays harmless for weights-only files
-written by 2.1.
+The `compat.py` rename shim (`load_weights_compat`, which mapped `*_block` to
+unsuffixed layer names for 2.0.8 vs 2.0.10 key names) is removed. It could not
+make a 2.0.x checkpoint load on 2.1, because the variable sets differ, and 2.1
+files need no key renaming. `compat.py` keeps `weights_digest` and the
+size-moment helpers.
 
 ## 4. Coupling flow and subnet
 
