@@ -38,12 +38,14 @@ examples = ["matplotlib", "seaborn", "tqdm", "ipywidgets", "ipykernel"]
 # 0.5.2+: provides `AggregationConfigError`, the metric-kind registry and the
 # checkpoint pool's `extra_metadata`.
 hpo = ["bayesflow-hpo>=0.5.2"]
+# Backend floors: minimum supported versions in the Keras 3.15 README
+# ("Minimum Supported Version" table in its package description).
 torch = ["torch>=2.1"]
 tensorflow = ["tensorflow>=2.16.1"]
 jax = ["jax>=0.4.20", "jaxlib>=0.4.20"]
 numba = ["numba>=0.59"]
 # Model-card figures (render_model_card); the Markdown is written without it.
-card = ["matplotlib>=3.7"]
+card = ["matplotlib>=3.11.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
