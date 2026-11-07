@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-07
+
 ### Fixed
 
 - `is_oom_error` now treats `RuntimeError("CUDA driver error: device not
