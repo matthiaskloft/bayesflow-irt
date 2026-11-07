@@ -8,26 +8,19 @@ person/item counts.
 from __future__ import annotations
 
 import warnings
-from importlib import import_module
 
 import keras
 import keras.ops as ops
+from bayesflow.networks.summary.transformers.attention.induced_set_attention import (
+    InducedSetAttention,
+)
+from bayesflow.networks.summary.transformers.attention.pooling_by_multihead_attention import (  # noqa: E501
+    PoolingByMultiHeadAttention,
+)
+from bayesflow.networks.summary.transformers.attention.set_attention import (
+    SetAttention,
+)
 from keras import layers
-
-try:
-    from bayesflow.networks.transformers.isab import (
-        InducedSetAttentionBlock as InducedSetAttention,
-    )
-    from bayesflow.networks.transformers.pma import PoolingByMultiHeadAttention
-    from bayesflow.networks.transformers.sab import SetAttentionBlock as SetAttention
-except ModuleNotFoundError:
-    _attention_pkg = "bayesflow.networks.summary.transformers.attention"
-    _isab_module = import_module(f"{_attention_pkg}.induced_set_attention")
-    _pma_module = import_module(f"{_attention_pkg}.pooling_by_multihead_attention")
-    _sab_module = import_module(f"{_attention_pkg}.set_attention")
-    InducedSetAttention = _isab_module.InducedSetAttention
-    PoolingByMultiHeadAttention = _pma_module.PoolingByMultiHeadAttention
-    SetAttention = _sab_module.SetAttention
 
 # ---------------------------------------------------------------------------
 # Shared helper: build a stack of SAB (or ISAB) layers
@@ -38,8 +31,6 @@ def _make_sab_stack(
     num_blocks: int,
     embed_dim: int,
     num_heads: int,
-    mlp_depth: int,
-    mlp_width: int,
     dropout: float,
     use_isab: bool = False,
     num_inducing_points: int = 32,
@@ -51,8 +42,6 @@ def _make_sab_stack(
         kwargs = dict(
             embed_dim=embed_dim,
             num_heads=num_heads,
-            mlp_depth=mlp_depth,
-            mlp_width=mlp_width,
             dropout=dropout,
         )
         if use_isab:
@@ -68,8 +57,6 @@ def _make_outer_item_layers(
     num_outer_sabs: int,
     outer_embed_dim: int,
     num_outer_heads: int,
-    outer_mlp_depth: int,
-    outer_mlp_width: int,
     dropout: float,
     use_outer_isab: bool,
     num_outer_inducing_points: int,
@@ -80,8 +67,6 @@ def _make_outer_item_layers(
         num_blocks=num_outer_sabs,
         embed_dim=outer_embed_dim,
         num_heads=num_outer_heads,
-        mlp_depth=outer_mlp_depth,
-        mlp_width=outer_mlp_width,
         dropout=dropout,
         use_isab=use_outer_isab,
         num_inducing_points=num_outer_inducing_points,
@@ -1492,9 +1477,6 @@ class MatrixEquivariantIRTSummary(keras.Layer):
         Hidden width of the outer item encoder.
     num_outer_heads : int
         Number of attention heads in each outer item block.
-    outer_mlp_depth, outer_mlp_width : int
-        Feed-forward network depth and width used inside the outer item
-        blocks.
     dropout : float
         Dropout rate used in both matrix and outer item blocks.
     use_outer_isab : bool
@@ -1646,8 +1628,6 @@ class MatrixEquivariantIRTSummary(keras.Layer):
         num_outer_sabs: int = 2,
         outer_embed_dim: int = 64,
         num_outer_heads: int = 4,
-        outer_mlp_depth: int = 2,
-        outer_mlp_width: int = 128,
         dropout: float = 0.05,
         use_outer_isab: bool = False,
         num_outer_inducing_points: int = 32,
@@ -1788,8 +1768,6 @@ class MatrixEquivariantIRTSummary(keras.Layer):
             num_outer_sabs=num_outer_sabs,
             outer_embed_dim=outer_embed_dim,
             num_outer_heads=num_outer_heads,
-            outer_mlp_depth=outer_mlp_depth,
-            outer_mlp_width=outer_mlp_width,
             dropout=dropout,
             use_outer_isab=use_outer_isab,
             num_outer_inducing_points=num_outer_inducing_points,
@@ -1857,8 +1835,6 @@ class MatrixEquivariantIRTSummary(keras.Layer):
             num_outer_sabs=num_outer_sabs,
             outer_embed_dim=outer_embed_dim,
             num_outer_heads=num_outer_heads,
-            outer_mlp_depth=outer_mlp_depth,
-            outer_mlp_width=outer_mlp_width,
             dropout=dropout,
             use_outer_isab=use_outer_isab,
             num_outer_inducing_points=num_outer_inducing_points,
@@ -1920,9 +1896,9 @@ class MatrixEquivariantIRTSummary(keras.Layer):
                 dummy = block(dummy, training=False)
 
         if self.person_pma is not None and not self.person_pma.built:
-            # BayesFlow 2.0.10 PMA has no build() implementation. An eager
-            # forward creates its nested attention/MLP weights before Keras
-            # restores the checkpoint, rather than marking unbuilt state built.
+            # Build the PMA eagerly so its nested attention/FFN weights exist
+            # before Keras restores a checkpoint (BayesFlow 2.1 PMA.build
+            # needs a concrete shape, not a symbolic person axis).
             # Its weights do not depend on the person count, so the same small
             # dummy count as above keeps a symbolic person axis buildable.
             self.person_pma(

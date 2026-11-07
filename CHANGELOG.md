@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING:** requires `bayesflow>=2.1.0`; BayesFlow 2.0.x is no longer
+  supported. 2.1 builds a different ISAB/SAB/PMA from the same settings
+  (pre-LN RMSNorm, gated residuals starting at 0, GLU feed-forward, no bias,
+  orthogonal init; about half the parameters at 16 inducing points, width 64,
+  4 heads) and moves the coupling-flow subnet initializer from
+  `glorot_uniform` to `orthogonal`. Checkpoints, weights files and HPO
+  studies from 2.0.x cannot be loaded or resumed; retrain. See
+  `docs/architecture/bayesflow-2.1-audit.md` and
+  `docs/architecture/bayesflow-2.1-checkpoints.md`.
+- `Adapter.add_transform` (removed in 2.1) replaced by `Adapter.append`;
+  custom adapter transforms accept backend tensors;
+  `EquivariantIRTApproximator.sample` still returns NumPy arrays.
+
+### Removed
+
+- `outer_mlp_depth` and `outer_mlp_width` from `MatrixEquivariantIRTSummary`
+  and the HPO builder: BayesFlow 2.1 attention blocks have no such settings
+  and silently ignored them. Passing them now raises `TypeError`.
+
 ## [0.6.0] - 2026-11-03
 
 ### Added

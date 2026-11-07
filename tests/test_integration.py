@@ -59,7 +59,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
 
         approximator = EquivariantIRTApproximator(
@@ -97,7 +96,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
 
         approximator = EquivariantIRTApproximator(
@@ -144,7 +142,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
 
         approximator = EquivariantIRTApproximator(
@@ -192,7 +189,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
 
         approximator = EquivariantIRTApproximator(
@@ -241,7 +237,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
 
         approximator = EquivariantIRTApproximator(
@@ -291,7 +286,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
 
         approximator = EquivariantIRTApproximator(
@@ -336,7 +330,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
             gradient_checkpointing=True,
         )
 
@@ -375,7 +368,6 @@ class TestApproximatorWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
 
         approximator = EquivariantIRTApproximator(
@@ -419,7 +411,6 @@ class TestMatrixEquivariantWorkflow:
             num_matrix_blocks=0,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -462,7 +453,6 @@ class TestMatrixEquivariantWorkflow:
             raw_feature_channels=("item_rest_correlation",),
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -501,7 +491,6 @@ class TestMatrixEquivariantWorkflow:
             num_matrix_blocks=2,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -542,7 +531,6 @@ class TestMatrixEquivariantWorkflow:
             num_pma_seeds=2,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -582,7 +570,6 @@ class TestMatrixEquivariantWorkflow:
             raw_feature_channels=("rest_mean_score", "item_rest_correlation"),
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -622,7 +609,6 @@ class TestMatrixEquivariantWorkflow:
             num_parameter_heads=2,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -661,7 +647,6 @@ class TestMatrixEquivariantWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -702,7 +687,6 @@ class TestMatrixEquivariantWorkflow:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -747,7 +731,6 @@ class TestMatrixEquivariantWorkflow:
             raw_feature_channels=("rest_mean_score", "item_rest_correlation"),
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,
@@ -795,7 +778,6 @@ class TestTrainingHelpers:
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=16,
-            outer_mlp_width=32,
         )
         approximator = EquivariantIRTApproximator(
             adapter=adapter,

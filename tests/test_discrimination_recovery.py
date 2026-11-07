@@ -109,7 +109,6 @@ def test_matrix_summary_recovers_2pl_discrimination():
             num_matrix_blocks=2,
             num_outer_sabs=1,
             outer_embed_dim=24,
-            outer_mlp_width=64,
         ),
         train_batches=train_batches,
         eval_raw=eval_raw,

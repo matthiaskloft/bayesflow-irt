@@ -37,7 +37,6 @@ def _make(simulator, inference_network=None, **kw):
             num_matrix_blocks=1,
             num_outer_sabs=1,
             outer_embed_dim=8,
-            outer_mlp_width=16,
         ),
         inference_network=inference_network,
         draws_summary_hidden_dim=8,

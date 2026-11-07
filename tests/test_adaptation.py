@@ -46,7 +46,6 @@ def parent_checkpoint(tmp_path, request):
             num_matrix_blocks=1,
             num_outer_sabs=0,
             outer_embed_dim=8,
-            outer_mlp_width=8,
         ),
     )
     model.compile(optimizer="adam")

@@ -179,8 +179,6 @@ def test_loading_parameterization_survives_save_load(tmp_path) -> None:
         num_outer_sabs=1,
         outer_embed_dim=8,
         num_outer_heads=2,
-        outer_mlp_depth=1,
-        outer_mlp_width=16,
         dropout=0.0,
     )
     approximator = EquivariantIRTApproximator(

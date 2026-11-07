@@ -35,6 +35,9 @@ cd bayesflow-irt
 pip install -e ".[torch]"
 ```
 
+Requires BayesFlow 2.1 or later (installed automatically). BayesFlow 2.0.x is
+not supported, and checkpoints trained on it do not load.
+
 Extras: `dev` (tests), `examples` (plotting and Jupyter), `card` (model-card
 plots), `hpo` (`bayesflow-hpo`, from PyPI), and `numba` (faster response
 sampling). The

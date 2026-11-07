@@ -61,8 +61,6 @@ def main() -> None:
         num_outer_sabs=0,
         outer_embed_dim=32,
         num_outer_heads=4,
-        outer_mlp_depth=2,
-        outer_mlp_width=48,
         dropout=0.05,
         use_outer_isab=True,
         num_outer_inducing_points=32,
