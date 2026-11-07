@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   studies from 2.0.x cannot be loaded or resumed; retrain. See
   `docs/architecture/bayesflow-2.1-audit.md` and
   `docs/architecture/bayesflow-2.1-checkpoints.md`.
+- Dependency floors raised to match BayesFlow 2.1: `keras>=3.15.0`,
+  `numpy>=2.5.1`, `scipy>=1.18.0`, `torch>=2.1` (extra). The `hpo` extra needs
+  a `bayesflow-hpo` release that supports BayesFlow 2.1
+  (matthiaskloft/bayesflow-hpo#152).
 - Requires Python >= 3.12 (and < 3.14 in practice), as BayesFlow 2.1.0 does;
   Python 3.11 support dropped.
 - `Adapter.add_transform` (removed in 2.1) replaced by `Adapter.append`;

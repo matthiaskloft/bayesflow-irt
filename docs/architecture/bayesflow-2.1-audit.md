@@ -71,7 +71,7 @@ and the example; passing them now raises `TypeError`. The FFN width follows
 from `outer_embed_dim` (factor 4 * 2/3, rounded up to a multiple of 64).
 
 Capacity (ISAB, 16 inducing points, width 64, 4 heads; figures from the
-requesting session, not re-measured here): 208,768 trainable parameters on
+requesting session; re-measured here on the standalone layer, dropout 0): 208,768 trainable parameters on
 2.0.8 vs 107,908 on 2.1.0. The outer encoder is a different, smaller model.
 Zero-initialized gates and orthogonal init also change early training. HPO
 results and benchmark numbers from 2.0.x are not comparable.

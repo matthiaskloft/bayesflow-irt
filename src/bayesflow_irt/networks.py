@@ -1897,10 +1897,9 @@ class MatrixEquivariantIRTSummary(keras.Layer):
 
         if self.person_pma is not None and not self.person_pma.built:
             # Build the PMA eagerly so its nested attention/FFN weights exist
-            # before Keras restores a checkpoint (BayesFlow 2.1 PMA.build
-            # needs a concrete shape, not a symbolic person axis).
-            # Its weights do not depend on the person count, so the same small
-            # dummy count as above keeps a symbolic person axis buildable.
+            # before Keras restores a checkpoint. Its weights do not depend on
+            # the person count, so the same small dummy count as above is
+            # enough.
             self.person_pma(
                 ops.zeros((2, dummy_num_persons, matrix_hidden_dim)),
                 training=False,

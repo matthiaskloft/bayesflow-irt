@@ -34,10 +34,11 @@ jobs:
           # `pytest.importorskip`; CI enforces the extra's floor in
           # pyproject.toml.
           #
-          # ONE pip command: bayesflow-hpo pins `keras>=3.9,<3.13` and this
-          # package asks for `keras>=3.12.1`, so resolving them together
-          # turns a genuine conflict into an install error instead of a
-          # silently inconsistent env.
+          # ONE pip command: bayesflow-hpo <= 0.7.0 pins `keras<3.13` while
+          # BayesFlow 2.1 and this package need `keras>=3.15.0`, so resolving
+          # them together turns a genuine conflict into an install error
+          # instead of a silently inconsistent env. Needs a bayesflow-hpo
+          # release that supports BayesFlow 2.1 (bayesflow-hpo#152).
           pip install -e ".[dev,torch,hpo]"
 
       - name: Run tests
