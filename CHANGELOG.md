@@ -17,6 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   studies from 2.0.x cannot be loaded or resumed; retrain. See
   `docs/architecture/bayesflow-2.1-audit.md` and
   `docs/architecture/bayesflow-2.1-checkpoints.md`.
+- Requires Python >= 3.12 (and < 3.14 in practice), as BayesFlow 2.1.0 does;
+  Python 3.11 support dropped.
 - `Adapter.add_transform` (removed in 2.1) replaced by `Adapter.append`;
   custom adapter transforms accept backend tensors;
   `EquivariantIRTApproximator.sample` still returns NumPy arrays.
