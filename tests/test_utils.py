@@ -89,6 +89,38 @@ class TestIsOomError:
         exc = SystemError("some unrelated interpreter-level bug")
         assert is_oom_error(exc) is False
 
+    @pytest.mark.parametrize(
+        "conf, expected",
+        [
+            (None, False),
+            ("", False),
+            ("expandable_segments:False", False),
+            ("max_split_size_mb:128", False),
+            ("xexpandable_segments:truefoo", False),
+            ("expandable_segments:True", True),
+            ("expandable_segments:true", True),
+            ("expandable_segments: True", True),
+            ("max_split_size_mb:128,expandable_segments:True", True),
+        ],
+    )
+    def test_device_not_ready_with_expandable_segments(
+        self, monkeypatch, conf, expected
+    ):
+        """Issue #42: under expandable_segments a CUDA OOM can surface as
+        'CUDA driver error: device not ready'; retriable only with that
+        allocator setting active."""
+        if conf is None:
+            monkeypatch.delenv("PYTORCH_CUDA_ALLOC_CONF", raising=False)
+        else:
+            monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", conf)
+        exc = RuntimeError("CUDA driver error: device not ready")
+        assert is_oom_error(exc) is expected
+
+    def test_device_not_ready_other_cases_not_oom(self, monkeypatch):
+        monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        assert is_oom_error(RuntimeError("CUDA driver error: other")) is False
+        assert is_oom_error(ValueError("CUDA driver error: device not ready")) is False
+
 
 class TestSafeEmptyCache:
     def test_does_not_raise(self):
