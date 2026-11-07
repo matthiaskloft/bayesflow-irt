@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-07
 ### Removed
 
 - `load_weights_compat` (also exported from `bayesflow_irt`) and the
