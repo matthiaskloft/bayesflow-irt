@@ -26,9 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `docs/architecture/bayesflow-2.1-checkpoints.md`.
 - Dependency floors raised to match BayesFlow 2.1: `keras>=3.15.0`,
   `numpy>=2.5.1`, `scipy>=1.18.0`; backend extras to the Keras 3.15 minimums (`torch>=2.1`,
-  `tensorflow>=2.16.1`, `jax>=0.4.20`); `card` extra `matplotlib>=3.11.1`. The `hpo` extra needs
-  a `bayesflow-hpo` release that supports BayesFlow 2.1
-  (matthiaskloft/bayesflow-hpo#152).
+  `tensorflow>=2.16.1`, `jax>=0.4.20`); `card` extra `matplotlib>=3.11.1`. The `hpo` extra now
+  requires `bayesflow-hpo>=0.8.0`, the first release that supports BayesFlow
+  2.1 (matthiaskloft/bayesflow-hpo#152).
 - Requires Python >= 3.12 (and < 3.14 in practice), as BayesFlow 2.1.0 does;
   Python 3.11 support dropped.
 - `Adapter.add_transform` (removed in 2.1) replaced by `Adapter.append`;
