@@ -1,46 +1,36 @@
-### Added
+### Removed
 
-- HPO: new categorical search dimension `irt_matrix_outer_attention`
-  (`"isab16"`, `"isab32"`, `"full"`) on `MatrixIRTSummarySpace` makes the outer
-  item attention searchable (ISAB with 16 or 32 inducing points, or full
-  self-attention). Default `"isab16"` is the previously hard-coded setting:
-  params without the key rebuild unchanged. Pin it with
-  `CategoricalDimension("irt_matrix_outer_attention", constant=...)`.
-  Trials of studies started before this change have no value for it and ran
-  with `"isab16"`; read a missing value as `"isab16"` when comparing modes.
-  Seeded reruns of a study may propose different values than before, since
-  the new dimension is sampled among the others.
-- HPO resume guard: `make_irt_hooks(...)` now builds a normalized validation
-  manifest (`hooks.manifest`: parameters, metrics and directions, aggregation,
-  joint-metric settings incl. `reference_id`/`resolution`, corners, per-corner
-  budget, seed, a digest of the validation data, flows and sampling kwargs,
-  optional `manifest_extra`, package versions). The first trial stores it in
-  the Optuna study's user attributes; a resumed study is compared before any
-  training and a mismatch raises `ValidationManifestError` naming the
-  differing keys (start a new study). Versions compare at major.minor. A
-  study with finished trials but no manifest is refused unless
-  `allow_unversioned_study=True`. `make_classical_reference_provider` exposes
-  `.reference_settings` for `manifest_extra`. Previously the custom
-  `validate_fn` bypassed upstream's resume guard silently.
+- `load_weights_compat` (also exported from `bayesflow_irt`) and the
+  `compat.py` attention-rename machinery for BayesFlow 2.0.8 vs 2.0.10
+  checkpoints. It could not load 2.0.x files on 2.1 and 2.1 needs no key
+  renaming. `weights_digest` and the size-moment helpers remain.
 
-### Fixed
+### Changed
 
-- `WarmupCosine` now ships in the installed package
-  (`bayesflow_irt.schedules`, also exported from the package root). It used to
-  live only in `scripts/train_irt.py`, so a fresh process could not load a
-  compiled checkpoint (`load_model(..., compile=True)` raised "Could not
-  locate class 'WarmupCosine'"). The registered name is unchanged
-  (`bayesflow_irt_scripts>WarmupCosine`), so existing checkpoints load without
-  `custom_objects`.
-- `fit_with_oom_retry`: after a CUDA OOM following a completed epoch the
-  optimizer step counter was rewound while the weights and Adam moment slots
-  kept the failed partial epoch's updates, skewing Adam bias correction and
-  LR schedules. Every applied update is now retained as partial progress and
-  `optimizer.iterations` stays monotonic; remaining epochs are tracked
-  separately.
-- Model card: the item-posterior type was reported as "not recorded" for
-  models whose hyperparameters arrive flat (e.g. from HPO trials), because the
-  metadata tracker filed `item_posterior` under `training` while the card read
-  it from `architecture`. The tracker now files it under `architecture`, the
-  card falls back to `training` for existing sidecars, and autoregressive
-  coupling flows get their own limitation note (items drawn jointly).
+- **BREAKING:** requires `bayesflow>=2.1.0`; BayesFlow 2.0.x is no longer
+  supported. 2.1 builds a different ISAB/SAB/PMA from the same settings
+  (pre-LN RMSNorm, gated residuals starting at 0, GLU feed-forward, no bias,
+  orthogonal init; about half the parameters at 16 inducing points, width 64,
+  4 heads) and moves the coupling-flow subnet initializer from
+  `glorot_uniform` to `orthogonal`. Checkpoints, weights files and HPO
+  studies from 2.0.x cannot be loaded or resumed; retrain. See
+  `docs/architecture/bayesflow-2.1-audit.md` and
+  `docs/architecture/bayesflow-2.1-checkpoints.md`.
+- Dependency floors raised to match BayesFlow 2.1: `keras>=3.15.0`,
+  `numpy>=2.5.1`, `scipy>=1.18.0`; backend extras to the Keras 3.15 minimums (`torch>=2.1`,
+  `tensorflow>=2.16.1`, `jax>=0.4.20`); `card` extra `matplotlib>=3.11.1`. The `hpo` extra now
+  requires `bayesflow-hpo>=0.8.0`, the first release that supports BayesFlow
+  2.1 (matthiaskloft/bayesflow-hpo#152).
+- Requires Python >= 3.12 (and < 3.14 in practice), as BayesFlow 2.1.0 does;
+  Python 3.11 support dropped.
+- `Adapter.add_transform` (removed in 2.1) replaced by `Adapter.append`;
+  custom adapter transforms accept backend tensors;
+  `EquivariantIRTApproximator.sample` still returns NumPy arrays. Direct
+  `Adapter` calls (forward or `inverse=True`) now return backend tensors
+  (BayesFlow 2.1 behaviour); use `keras.ops.convert_to_numpy`.
+
+### Removed
+
+- `outer_mlp_depth` and `outer_mlp_width` from `MatrixEquivariantIRTSummary`
+  and the HPO builder: BayesFlow 2.1 attention blocks have no such settings
+  and silently ignored them. Passing them now raises `TypeError`.

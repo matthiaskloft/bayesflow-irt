@@ -1,2 +1,2 @@
-# Core install for bayesflow-irt (Python >= 3.11)
+# Core install for bayesflow-irt (Python >= 3.12)
 -e .

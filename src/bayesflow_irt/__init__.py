@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("bayesflow-irt")
 except PackageNotFoundError:
-    __version__ = "0.6.0"  # fallback for uninstalled (e.g. raw checkout)
+    __version__ = "0.7.0"  # fallback for uninstalled (e.g. raw checkout)
 
 from .adaptation import AdaptationResult, adapt_and_fit
 from .adapters import (
@@ -33,7 +33,6 @@ from .compat import (
     apply_checkpoint_size_moments,
     legacy_log_size_moments,
     legacy_size_moments,
-    load_weights_compat,
     resolve_checkpoint_size_moments,
     set_adapter_size_moments,
     weights_digest,
@@ -119,7 +118,6 @@ __all__ = [
     "MatrixEquivariantIRTSummary",
     "EquivariantIRTApproximator",
     "DrawsSummary",
-    "load_weights_compat",
     "weights_digest",
     "SIZE_MOMENTS_CHANGED_AT",
     "adapter_size_moments",

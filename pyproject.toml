@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bayesflow-irt"
-version = "0.6.0"
+version = "0.7.0"
 description = "BayesFlow add-on for Item Response Theory with many-to-many summary networks"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     { name = "bayesflow-irt contributors" },
 ]
@@ -16,16 +16,15 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "bayesflow>=2.0.6",
-    "numpy>=1.24",
-    "keras>=3.12.1",
-    "scipy>=1.10",
+    "bayesflow>=2.1.0",
+    "numpy>=2.5.1",
+    "keras>=3.15.0",
+    "scipy>=1.18.0",
 ]
 
 [project.urls]
@@ -38,13 +37,15 @@ dev = ["pytest", "ruff", "mypy", "matplotlib", "seaborn"]
 examples = ["matplotlib", "seaborn", "tqdm", "ipywidgets", "ipykernel"]
 # 0.5.2+: provides `AggregationConfigError`, the metric-kind registry and the
 # checkpoint pool's `extra_metadata`.
-hpo = ["bayesflow-hpo>=0.5.2"]
-torch = ["torch>=2.0"]
-tensorflow = ["tensorflow>=2.16"]
-jax = ["jax>=0.4", "jaxlib>=0.4"]
+hpo = ["bayesflow-hpo>=0.8.0"]
+# Backend floors: minimum supported versions in the Keras 3.15 README
+# ("Minimum Supported Version" table in its package description).
+torch = ["torch>=2.1"]
+tensorflow = ["tensorflow>=2.16.1"]
+jax = ["jax>=0.4.20", "jaxlib>=0.4.20"]
 numba = ["numba>=0.59"]
 # Model-card figures (render_model_card); the Markdown is written without it.
-card = ["matplotlib>=3.7"]
+card = ["matplotlib>=3.11.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -54,7 +55,7 @@ bayesflow_irt = ["_card_assets/*.js", "_card_assets/*.css"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
@@ -67,7 +68,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["src/bayesflow_irt"]
 # bayesflow/keras ship incomplete type information.
 ignore_missing_imports = true

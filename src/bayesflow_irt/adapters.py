@@ -110,6 +110,21 @@ def _standardize_size_conditions(adapter, simulator) -> None:
         adapter.standardize(key, mean=np.float32(mean), std=np.float32(std))
 
 
+def _as_numpy(data):
+    """Return ``data`` as a NumPy array.
+
+    BayesFlow >= 2.1 adapters pass backend tensors (e.g. ``torch.Tensor``)
+    between transforms after the first keras-ops transform, whereas 2.0.x
+    passed NumPy arrays. The custom transforms below use NumPy semantics, so
+    they normalise their input first; this is a no-op for NumPy input.
+    """
+    if isinstance(data, np.ndarray):
+        return data
+    if keras.ops.is_tensor(data):
+        return np.asarray(keras.ops.convert_to_numpy(data))
+    return np.asarray(data)
+
+
 # ---------------------------------------------------------------------------
 # Elementwise transforms
 # ---------------------------------------------------------------------------
@@ -125,6 +140,7 @@ class LogTransform(ElementwiseTransform):
     """
 
     def forward(self, data: np.ndarray, **kwargs) -> np.ndarray:  # noqa: D401
+        data = _as_numpy(data)
         if np.any(data <= 0):
             raise ValueError(
                 "LogTransform.forward requires strictly positive input; got "
@@ -133,7 +149,7 @@ class LogTransform(ElementwiseTransform):
         return np.log(data)
 
     def inverse(self, data: np.ndarray, **kwargs) -> np.ndarray:  # noqa: D401
-        return np.exp(data)
+        return np.exp(_as_numpy(data))
 
     def get_config(self) -> dict:
         return {}
@@ -190,7 +206,7 @@ class OneHotEncode(ElementwiseTransform):
         self.n_categories = n_categories
 
     def forward(self, data: np.ndarray, **kwargs) -> np.ndarray:  # noqa: D401
-        values = np.asarray(data)
+        values = _as_numpy(data)
         # Validate before casting: astype(int) would silently truncate
         # 0.9 / 1.9 / -0.1 into valid-looking categories.
         if (
@@ -213,7 +229,7 @@ class OneHotEncode(ElementwiseTransform):
         return np.eye(self.n_categories, dtype=np.float32)[idx]
 
     def inverse(self, data: np.ndarray, **kwargs) -> np.ndarray:  # noqa: D401
-        return np.argmax(data, axis=-1).astype(np.float32)
+        return np.argmax(_as_numpy(data), axis=-1).astype(np.float32)
 
     def get_config(self) -> dict:
         return {"n_categories": self.n_categories}
@@ -257,7 +273,8 @@ class _BaseLoadingReparamTransform(Transform):
         # inference variables. In that case this transform should be a no-op.
         if "a" in data and self._source_key in data:
             data[self._target_key] = -(
-                self._broadcast_a(data["a"]) * data[self._source_key]
+                self._broadcast_a(_as_numpy(data["a"]))
+                * _as_numpy(data[self._source_key])
             )
             del data[self._source_key]
         return data
@@ -266,7 +283,8 @@ class _BaseLoadingReparamTransform(Transform):
         data = dict(data)
         if "a" in data and self._target_key in data:
             data[self._source_key] = -(
-                data[self._target_key] / self._broadcast_a(data["a"])
+                _as_numpy(data[self._target_key])
+                / self._broadcast_a(_as_numpy(data["a"]))
             )
             del data[self._target_key]
         return data
@@ -438,7 +456,7 @@ def make_2pl_adapter(
         # both a and b are still in their raw (unstandardized, unlogged) scales.
         # During inversion this transform runs LAST, after a has been exp()'d
         # back to original scale, and computes b = -d/a.
-        adapter.add_transform(_LoadingReparamTransform())
+        adapter.append(_LoadingReparamTransform())
 
     # ── a channel ──────────────────────────────────────────────────────────
     adapter.expand_dims("a", axis=-1)
@@ -446,7 +464,7 @@ def make_2pl_adapter(
     if log_transform_a:
         # log(a) ≈ Normal → much easier for the velocity network;
         # inverse (exp) guarantees a > 0 when sampling posteriors.
-        adapter.add_transform(
+        adapter.append(
             FilterTransform(
                 include="a",
                 transform_constructor=LogTransform,
@@ -590,7 +608,7 @@ def make_pcm_adapter(
     adapter.rename("delta", "inference_variables")
 
     # One-hot encode responses: (B, P, I) → (B, P, I, K)
-    adapter.add_transform(
+    adapter.append(
         FilterTransform(
             include="responses",
             transform_constructor=OneHotEncodeFactory(n_categories),
@@ -666,13 +684,13 @@ def make_gpcm_adapter(
     adapter.convert_dtype("float64", "float32")
 
     if internal_parameterization == "loading":
-        adapter.add_transform(_GPCMLoadingReparamTransform())
+        adapter.append(_GPCMLoadingReparamTransform())
 
     # -- a channel: (B, I) -> (B, I, 1) --
     adapter.expand_dims("a", axis=-1)
 
     if log_transform_a:
-        adapter.add_transform(
+        adapter.append(
             FilterTransform(
                 include="a",
                 transform_constructor=LogTransform,
@@ -715,7 +733,7 @@ def make_gpcm_adapter(
     )
 
     # One-hot encode responses: (B, P, I) -> (B, P, I, K)
-    adapter.add_transform(
+    adapter.append(
         FilterTransform(
             include="responses",
             transform_constructor=OneHotEncodeFactory(n_categories),
